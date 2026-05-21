@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.local.wacomd</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <!-- Edit this path if you install the binary somewhere else. -->
+        <string>/Users/CHANGE_ME/Library/Application Support/wacomd/wacomd</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+        <key>Crashed</key>
+        <true/>
+    </dict>
+
+    <key>ThrottleInterval</key>
+    <integer>5</integer>
+
+    <key>ProcessType</key>
+    <string>Interactive</string>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/wacomd.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/wacomd.log</string>
+</dict>
+</plist>
