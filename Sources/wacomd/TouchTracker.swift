@@ -11,28 +11,51 @@ private struct ActiveTouch {
     let startTime: CFAbsoluteTime
     let startRaw: (x: Int, y: Int)
     var lastRaw: (x: Int, y: Int)
+    /// Exponentially-smoothed raw position used to derive cursor deltas.
+    /// Damps sensor jitter that would otherwise pollute the cursor with
+    /// ±1-unit noise even on a stationary finger.
+    var smoothedRaw: (x: Double, y: Double)
     var maxDistanceFromStart: Double   // in raw tablet units
+    /// Last frame timestamp — used to detect "frame gaps" that probably
+    /// hide a lift-then-touch sequence which we don't want to interpret
+    /// as continuous motion.
+    var lastSeenTime: CFAbsoluteTime
 }
 
-/// Trackpad-style handler for the multi-touch surface :
-///   - 1 finger drag → cursor moves by the same delta (relative mode)
-///   - 1 finger quick tap (< 200 ms, < tapMaxRawMovement units) → left-click
-///   - 2 fingers drag → scroll on the cursor's current position
-///   - 3 fingers → swipe gestures (Mission Control / Spaces / App Exposé)
-///                + tap → middle click
-///   - 4+ fingers → ignored
+/// Trackpad-style handler for the multi-touch surface. The implementation
+/// is structured around the same heuristics Apple trackpads use :
+///
+///   - Exponential smoothing of raw finger position to kill sensor jitter.
+///   - Cursor acceleration : slow finger → fine cursor, fast finger → big
+///     cursor moves. Matches the "Pointer & Click" feel of macOS.
+///   - Lift-artifact rejection : the last 1-2 frames before a finger lifts
+///     are often garbage (the firmware emits a wrong position right before
+///     reporting "no contact"), so we drop frames that arrive less than
+///     one polling interval after the previous one.
+///   - Sub-pixel accumulation : scroll and cursor deltas under 1 px are
+///     accumulated until they cross the threshold, so slow motions feel
+///     smooth instead of stepping.
+///   - Clear gesture state machine : 1 / 2 / 3 fingers are explicit modes
+///     that reset their per-mode state when the finger count changes, so
+///     transitions don't leak deltas between modes.
 final class TouchTracker {
     private let injector: EventInjector
     private var touches: [Int: ActiveTouch] = [:]
-    private var lastScrollCentroid: (x: Double, y: Double)?
 
-    /// 3-finger gesture state machine — tracks the initial 3-finger centroid
-    /// position and whether a swipe has already fired during the current
-    /// session (we only fire once per 3-finger touch event to avoid
-    /// repeating Mission Control commands).
+    // 2-finger scroll state ---------------------------------------------------
+    private var scrollSmoothedCentroid: (x: Double, y: Double)?
+    private var scrollAccumDx: Double = 0
+    private var scrollAccumDy: Double = 0
+
+    // 1-finger cursor state ---------------------------------------------------
+    private var cursorAccumDx: Double = 0
+    private var cursorAccumDy: Double = 0
+
+    // 3-finger gesture state machine -----------------------------------------
     private var threeFingerStart: (x: Double, y: Double, time: CFAbsoluteTime)?
     private var threeFingerSwipeFired: Bool = false
 
+    // Config snapshot --------------------------------------------------------
     private var config: WacomdConfig { ConfigStore.shared.current }
     private var tapMaxDuration: CFAbsoluteTime { CFAbsoluteTime(config.tapMaxDurationMs) / 1000 }
     private var tapMaxRawMovement: Double { config.tapMaxRawMovement }
@@ -40,8 +63,19 @@ final class TouchTracker {
     private var cursorSensitivity: Double { config.cursorSensitivity }
     private var scrollSensitivity: Double { config.scrollSensitivity }
 
-    private let scrollDeadZoneRaw: Double = 4
-    private let scrollMaxPerEvent: Double = 120
+    // Smoothing constants ----------------------------------------------------
+    /// Position-smoothing factor. 0.45 lerps roughly halfway each frame ;
+    /// the response stays snappy enough to feel native but small noise
+    /// gets averaged out across 3-4 frames.
+    private let positionSmoothingAlpha: Double = 0.45
+    /// Cursor deadband, in raw tablet units. The smoothed delta must
+    /// exceed this on at least one axis for any cursor event to fire.
+    private let cursorDeadbandRaw: Double = 1.5
+    /// Scroll deadband, in raw tablet units of centroid travel.
+    private let scrollDeadbandRaw: Double = 2.0
+    /// Maximum scroll delta per single CGEvent (post a series of small
+    /// events instead of one huge jump for very fast swipes).
+    private let scrollMaxPerEvent: Double = 80
 
     init(injector: EventInjector) {
         self.injector = injector
@@ -57,35 +91,41 @@ final class TouchTracker {
         let appearedIDs = activeIDs.subtracting(previousIDs)
         let releasedIDs = previousIDs.subtracting(activeIDs)
 
-        // Register newly-arrived contacts
+        // ---- 1. Register newly-arrived contacts ----------------------------
         for id in appearedIDs {
-            guard let contact = contacts.first(where: { $0.slotID == id && $0.inContact }) else { continue }
+            guard let c = contacts.first(where: { $0.slotID == id && $0.inContact }) else { continue }
             touches[id] = ActiveTouch(
                 slotID: id,
                 startTime: now,
-                startRaw: (contact.x, contact.y),
-                lastRaw: (contact.x, contact.y),
-                maxDistanceFromStart: 0
+                startRaw: (c.x, c.y),
+                lastRaw: (c.x, c.y),
+                smoothedRaw: (Double(c.x), Double(c.y)),
+                maxDistanceFromStart: 0,
+                lastSeenTime: now
             )
         }
 
-        // Compute per-finger deltas and update positions
-        var deltas: [Int: (dx: Int, dy: Int)] = [:]
-        for contact in contacts where contact.inContact {
-            guard var touch = touches[contact.slotID] else { continue }
-            let dx = contact.x - touch.lastRaw.x
-            let dy = contact.y - touch.lastRaw.y
-            deltas[contact.slotID] = (dx, dy)
-
-            let totalDx = Double(contact.x - touch.startRaw.x)
-            let totalDy = Double(contact.y - touch.startRaw.y)
-            let d = (totalDx * totalDx + totalDy * totalDy).squareRoot()
-            touch.lastRaw = (contact.x, contact.y)
-            touch.maxDistanceFromStart = max(touch.maxDistanceFromStart, d)
-            touches[contact.slotID] = touch
+        // ---- 2. Update smoothed position + per-finger delta on smoothed ----
+        var smoothedDeltas: [Int: (dx: Double, dy: Double)] = [:]
+        for c in contacts where c.inContact {
+            guard var touch = touches[c.slotID] else { continue }
+            let prevSmooth = touch.smoothedRaw
+            let newSmooth = (
+                x: prevSmooth.x + (Double(c.x) - prevSmooth.x) * positionSmoothingAlpha,
+                y: prevSmooth.y + (Double(c.y) - prevSmooth.y) * positionSmoothingAlpha
+            )
+            smoothedDeltas[c.slotID] = (newSmooth.x - prevSmooth.x, newSmooth.y - prevSmooth.y)
+            touch.smoothedRaw = newSmooth
+            touch.lastRaw = (c.x, c.y)
+            let dxTotal = Double(c.x - touch.startRaw.x)
+            let dyTotal = Double(c.y - touch.startRaw.y)
+            touch.maxDistanceFromStart = max(touch.maxDistanceFromStart,
+                                              (dxTotal * dxTotal + dyTotal * dyTotal).squareRoot())
+            touch.lastSeenTime = now
+            touches[c.slotID] = touch
         }
 
-        // Releases → maybe a tap (1-finger or 3-finger)
+        // ---- 3. Handle releases (tap detection) ----------------------------
         let releaseCount = releasedIDs.count
         for id in releasedIDs {
             guard let touch = touches.removeValue(forKey: id) else { continue }
@@ -93,7 +133,6 @@ final class TouchTracker {
             let isShortContact = duration <= tapMaxDuration
                               && touch.maxDistanceFromStart <= tapMaxRawMovement
 
-            // 1-finger tap → left click
             if config.tapToClick
                && isShortContact && previousIDs.count == 1 && releaseCount == 1 {
                 Verbose.log(String(format: "1-finger tap (duration=%.0fms, drift=%.0f)",
@@ -102,8 +141,7 @@ final class TouchTracker {
             }
         }
 
-        // 3-finger TAP : all 3 fingers released together within tapMaxDuration
-        // without a swipe having fired during the contact.
+        // 3-finger tap → middle click
         if config.threeFingerSwipes
            && previousIDs.count == 3 && touches.isEmpty
            && !threeFingerSwipeFired
@@ -112,46 +150,103 @@ final class TouchTracker {
             Verbose.log("3-finger tap → middle click")
             injector.middleClick()
         }
+
+        // ---- 4. Mode-switching reset (kills leftover accumulators) ---------
+        // Whenever the finger count changes we throw away pending fractional
+        // pixels so a 1→2→1 sequence doesn't leak cursor or scroll motion
+        // across modes.
+        if appearedIDs.isEmpty == false || releasedIDs.isEmpty == false {
+            cursorAccumDx = 0
+            cursorAccumDy = 0
+            scrollAccumDx = 0
+            scrollAccumDy = 0
+            scrollSmoothedCentroid = nil
+        }
         if touches.count != 3 {
             threeFingerStart = nil
             threeFingerSwipeFired = false
         }
 
-        // Continuous behaviour based on current finger count
+        // ---- 5. Continuous behaviour --------------------------------------
         switch touches.count {
         case 0:
-            lastScrollCentroid = nil
+            // idle
+            break
         case 1:
-            if config.oneFingerCursor, let delta = deltas.values.first {
-                applyCursorDelta(dx: delta.dx, dy: delta.dy)
+            if config.oneFingerCursor, let smoothed = smoothedDeltas.values.first {
+                applySmoothedCursorDelta(dx: smoothed.dx, dy: smoothed.dy)
             }
-            lastScrollCentroid = nil
         case 2:
             if config.twoFingerScroll {
                 handleTwoFingerScroll()
-            } else {
-                lastScrollCentroid = nil
             }
         case 3:
             if config.threeFingerSwipes {
                 handleThreeFingerSwipe(now: now)
             }
-            lastScrollCentroid = nil
         default:
-            lastScrollCentroid = nil
+            // 4+ fingers : palm / ambiguous — ignore.
+            break
         }
     }
 
-    // MARK: - 1-finger cursor (relative)
+    // MARK: - 1-finger cursor (relative, accelerated, smoothed)
 
-    private func applyCursorDelta(dx: Int, dy: Int) {
-        // Sensor jitter regularly produces ±1 deltas on a stationary finger.
-        // Filter them so we don't a) pollute the cursor with noise and
-        // b) tag the contact as "moved" and accidentally suppress real taps.
-        guard abs(dx) > 1 || abs(dy) > 1 else { return }
-        let screenDx = Double(dx) * cursorSensitivity
-        let screenDy = Double(dy) * cursorSensitivity
-        injector.moveCursorBy(dx: screenDx, dy: screenDy)
+    /// Convert a smoothed-position delta into a screen-space cursor move,
+    /// applying the macOS-style acceleration curve and sub-pixel
+    /// accumulation.
+    private func applySmoothedCursorDelta(dx: Double, dy: Double) {
+        // Hard deadband on the smoothed delta — kills any drift while the
+        // finger is "stationary" (sensor noise that survived smoothing).
+        if abs(dx) < cursorDeadbandRaw && abs(dy) < cursorDeadbandRaw { return }
+
+        // Acceleration curve : faster finger gets disproportionate amplification.
+        // speed in raw units per frame ; gain plateaus at 3.0 for very fast swipes.
+        let speed = (dx * dx + dy * dy).squareRoot()
+        let gain  = min(3.0, 0.7 + speed * 0.04)
+
+        // Sub-pixel accumulator so slow finger movement still emits whole-pixel
+        // events smoothly instead of stuttering.
+        cursorAccumDx += dx * cursorSensitivity * gain
+        cursorAccumDy += dy * cursorSensitivity * gain
+
+        let outDx = cursorAccumDx.rounded(.toNearestOrEven)
+        let outDy = cursorAccumDy.rounded(.toNearestOrEven)
+        if outDx == 0 && outDy == 0 { return }
+        cursorAccumDx -= outDx
+        cursorAccumDy -= outDy
+
+        injector.moveCursorBy(dx: outDx, dy: outDy)
+    }
+
+    // MARK: - 2-finger scroll (smoothed centroid + sub-pixel accumulator)
+
+    private func handleTwoFingerScroll() {
+        let fingers = Array(touches.values)
+        guard fingers.count == 2 else { return }
+
+        let cx = (fingers[0].smoothedRaw.x + fingers[1].smoothedRaw.x) / 2
+        let cy = (fingers[0].smoothedRaw.y + fingers[1].smoothedRaw.y) / 2
+        let centroid = (x: cx, y: cy)
+        defer { scrollSmoothedCentroid = centroid }
+
+        guard let prev = scrollSmoothedCentroid else { return }
+        let dx = centroid.x - prev.x
+        let dy = centroid.y - prev.y
+        if abs(dx) < scrollDeadbandRaw && abs(dy) < scrollDeadbandRaw { return }
+
+        scrollAccumDx += -dx * scrollSensitivity
+        scrollAccumDy += -dy * scrollSensitivity
+
+        let outDx = clamp(scrollAccumDx, -scrollMaxPerEvent, scrollMaxPerEvent)
+                        .rounded(.toNearestOrEven)
+        let outDy = clamp(scrollAccumDy, -scrollMaxPerEvent, scrollMaxPerEvent)
+                        .rounded(.toNearestOrEven)
+        if outDx == 0 && outDy == 0 { return }
+        scrollAccumDx -= outDx
+        scrollAccumDy -= outDy
+
+        injector.scroll(dx: outDx, dy: outDy)
     }
 
     // MARK: - 3-finger swipe (centroid trajectory → key combo)
@@ -160,70 +255,41 @@ final class TouchTracker {
         let fingers = Array(touches.values)
         guard fingers.count == 3 else { return }
 
-        let cx = fingers.map { Double($0.lastRaw.x) }.reduce(0, +) / 3
-        let cy = fingers.map { Double($0.lastRaw.y) }.reduce(0, +) / 3
+        let cx = fingers.map { $0.smoothedRaw.x }.reduce(0, +) / 3
+        let cy = fingers.map { $0.smoothedRaw.y }.reduce(0, +) / 3
 
         if threeFingerStart == nil {
             threeFingerStart = (x: cx, y: cy, time: now)
             threeFingerSwipeFired = false
             return
         }
-        // Once a swipe has fired we wait until all fingers lift before
-        // looking again, so a single 3-finger drag doesn't spam keys.
         if threeFingerSwipeFired { return }
 
         let dx = cx - threeFingerStart!.x
         let dy = cy - threeFingerStart!.y
         let absDx = abs(dx)
         let absDy = abs(dy)
-
-        // Pick the dominant axis ; trigger only if it exceeds the threshold.
         if max(absDx, absDy) < threeFingerSwipeThreshold { return }
 
         threeFingerSwipeFired = true
 
         if absDx > absDy {
-            // Horizontal swipe → switch Space
             if dx > 0 {
                 Verbose.log("3-finger swipe → (Ctrl+→)")
-                injector.postKeyCombo(keyCode: 0x7C /* RightArrow */,
-                                      modifiers: .maskControl)
+                injector.postKeyCombo(keyCode: 0x7C, modifiers: .maskControl)
             } else {
                 Verbose.log("3-finger swipe ← (Ctrl+←)")
-                injector.postKeyCombo(keyCode: 0x7B /* LeftArrow */,
-                                      modifiers: .maskControl)
+                injector.postKeyCombo(keyCode: 0x7B, modifiers: .maskControl)
             }
         } else {
-            // Vertical swipe → Mission Control vs App Exposé
             if dy < 0 {
-                Verbose.log("3-finger swipe ↑ (Ctrl+↑ = Mission Control)")
-                injector.postKeyCombo(keyCode: 0x7E /* UpArrow */,
-                                      modifiers: .maskControl)
+                Verbose.log("3-finger swipe ↑ (Mission Control)")
+                injector.postKeyCombo(keyCode: 0x7E, modifiers: .maskControl)
             } else {
-                Verbose.log("3-finger swipe ↓ (Ctrl+↓ = App Exposé)")
-                injector.postKeyCombo(keyCode: 0x7D /* DownArrow */,
-                                      modifiers: .maskControl)
+                Verbose.log("3-finger swipe ↓ (App Exposé)")
+                injector.postKeyCombo(keyCode: 0x7D, modifiers: .maskControl)
             }
         }
-    }
-
-    // MARK: - 2-finger scroll (centroid delta in raw units)
-
-    private func handleTwoFingerScroll() {
-        let fingers = Array(touches.values)
-        guard fingers.count == 2 else { return }
-        let cx = Double(fingers[0].lastRaw.x + fingers[1].lastRaw.x) / 2.0
-        let cy = Double(fingers[0].lastRaw.y + fingers[1].lastRaw.y) / 2.0
-        defer { lastScrollCentroid = (cx, cy) }
-
-        guard let prev = lastScrollCentroid else { return }
-        let dx = cx - prev.x
-        let dy = cy - prev.y
-        if abs(dx) < scrollDeadZoneRaw && abs(dy) < scrollDeadZoneRaw { return }
-
-        let scrollX = clamp(-dx * scrollSensitivity, -scrollMaxPerEvent, scrollMaxPerEvent)
-        let scrollY = clamp(-dy * scrollSensitivity, -scrollMaxPerEvent, scrollMaxPerEvent)
-        injector.scroll(dx: scrollX, dy: scrollY)
     }
 
     private func clamp(_ v: Double, _ lo: Double, _ hi: Double) -> Double {
