@@ -17,11 +17,20 @@ private struct ActiveTouch {
 ///   - 1 finger drag → cursor moves by the same delta (relative mode)
 ///   - 1 finger quick tap (< 200 ms, < tapMaxRawMovement units) → left-click
 ///   - 2 fingers drag → scroll on the cursor's current position
-///   - 3+ fingers → ignored
+///   - 3 fingers → swipe gestures (Mission Control / Spaces / App Exposé)
+///                + tap → middle click
+///   - 4+ fingers → ignored
 final class TouchTracker {
     private let injector: EventInjector
     private var touches: [Int: ActiveTouch] = [:]
     private var lastScrollCentroid: (x: Double, y: Double)?
+
+    /// 3-finger gesture state machine — tracks the initial 3-finger centroid
+    /// position and whether a swipe has already fired during the current
+    /// session (we only fire once per 3-finger touch event to avoid
+    /// repeating Mission Control commands).
+    private var threeFingerStart: (x: Double, y: Double, time: CFAbsoluteTime)?
+    private var threeFingerSwipeFired: Bool = false
 
     /// Tap recognised if : duration < `tapMaxDuration` AND max raw-unit
     /// displacement during the contact < `tapMaxRawMovement`.
@@ -29,6 +38,11 @@ final class TouchTracker {
     /// In raw tablet units (~4095 = full tablet). 60 units ≈ 1.5 mm — tight
     /// enough to reject accidental drags while letting natural taps through.
     private let tapMaxRawMovement: Double = 60
+
+    /// 3-finger swipe is triggered once any axis of centroid motion exceeds
+    /// `threeFingerSwipeThreshold` raw units. The DIRECTION of the dominant
+    /// delta determines which gesture fires.
+    private let threeFingerSwipeThreshold: Double = 200
 
     /// Cursor sensitivity, in screen pixels per raw tablet unit.
     /// 0.35 → a 1-inch finger swipe (~800 raw units on a PTH-451) moves the
@@ -85,20 +99,34 @@ final class TouchTracker {
             touches[contact.slotID] = touch
         }
 
-        // Releases → maybe a tap
+        // Releases → maybe a tap (1-finger or 3-finger)
         let releaseCount = releasedIDs.count
         for id in releasedIDs {
             guard let touch = touches.removeValue(forKey: id) else { continue }
             let duration = now - touch.startTime
-            let wasTap = duration <= tapMaxDuration
-                      && touch.maxDistanceFromStart <= tapMaxRawMovement
-                      && previousIDs.count == 1  // ignore taps that were part of a 2-finger gesture
-                      && releaseCount == 1
-            if wasTap {
-                Verbose.log(String(format: "tap detected (duration=%.0fms, drift=%.0f units)",
+            let isShortContact = duration <= tapMaxDuration
+                              && touch.maxDistanceFromStart <= tapMaxRawMovement
+
+            // 1-finger tap → left click
+            if isShortContact && previousIDs.count == 1 && releaseCount == 1 {
+                Verbose.log(String(format: "1-finger tap (duration=%.0fms, drift=%.0f)",
                                    duration * 1000, touch.maxDistanceFromStart))
                 injector.tapClick()
             }
+        }
+
+        // 3-finger TAP : all 3 fingers released together within tapMaxDuration
+        // without a swipe having fired during the contact.
+        if previousIDs.count == 3 && touches.isEmpty
+           && !threeFingerSwipeFired
+           && threeFingerStart != nil
+           && (now - threeFingerStart!.time) <= tapMaxDuration {
+            Verbose.log("3-finger tap → middle click")
+            injector.middleClick()
+        }
+        if touches.count != 3 {
+            threeFingerStart = nil
+            threeFingerSwipeFired = false
         }
 
         // Continuous behaviour based on current finger count
@@ -113,6 +141,9 @@ final class TouchTracker {
             lastScrollCentroid = nil
         case 2:
             handleTwoFingerScroll()
+        case 3:
+            handleThreeFingerSwipe(now: now)
+            lastScrollCentroid = nil
         default:
             lastScrollCentroid = nil
         }
@@ -126,6 +157,59 @@ final class TouchTracker {
         let screenDx = Double(dx) * cursorSensitivity
         let screenDy = Double(dy) * cursorSensitivity
         injector.moveCursorBy(dx: screenDx, dy: screenDy)
+    }
+
+    // MARK: - 3-finger swipe (centroid trajectory → key combo)
+
+    private func handleThreeFingerSwipe(now: CFAbsoluteTime) {
+        let fingers = Array(touches.values)
+        guard fingers.count == 3 else { return }
+
+        let cx = fingers.map { Double($0.lastRaw.x) }.reduce(0, +) / 3
+        let cy = fingers.map { Double($0.lastRaw.y) }.reduce(0, +) / 3
+
+        if threeFingerStart == nil {
+            threeFingerStart = (x: cx, y: cy, time: now)
+            threeFingerSwipeFired = false
+            return
+        }
+        // Once a swipe has fired we wait until all fingers lift before
+        // looking again, so a single 3-finger drag doesn't spam keys.
+        if threeFingerSwipeFired { return }
+
+        let dx = cx - threeFingerStart!.x
+        let dy = cy - threeFingerStart!.y
+        let absDx = abs(dx)
+        let absDy = abs(dy)
+
+        // Pick the dominant axis ; trigger only if it exceeds the threshold.
+        if max(absDx, absDy) < threeFingerSwipeThreshold { return }
+
+        threeFingerSwipeFired = true
+
+        if absDx > absDy {
+            // Horizontal swipe → switch Space
+            if dx > 0 {
+                Verbose.log("3-finger swipe → (Ctrl+→)")
+                injector.postKeyCombo(keyCode: 0x7C /* RightArrow */,
+                                      modifiers: .maskControl)
+            } else {
+                Verbose.log("3-finger swipe ← (Ctrl+←)")
+                injector.postKeyCombo(keyCode: 0x7B /* LeftArrow */,
+                                      modifiers: .maskControl)
+            }
+        } else {
+            // Vertical swipe → Mission Control vs App Exposé
+            if dy < 0 {
+                Verbose.log("3-finger swipe ↑ (Ctrl+↑ = Mission Control)")
+                injector.postKeyCombo(keyCode: 0x7E /* UpArrow */,
+                                      modifiers: .maskControl)
+            } else {
+                Verbose.log("3-finger swipe ↓ (Ctrl+↓ = App Exposé)")
+                injector.postKeyCombo(keyCode: 0x7D /* DownArrow */,
+                                      modifiers: .maskControl)
+            }
+        }
     }
 
     // MARK: - 2-finger scroll (centroid delta in raw units)

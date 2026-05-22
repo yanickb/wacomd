@@ -297,6 +297,35 @@ final class EventInjector {
         up.post(tap: .cghidEventTap)
     }
 
+    // MARK: - Keyboard shortcut emission (for 3-finger gestures)
+
+    /// Post a single keyboard chord (modifier flags + virtual key code).
+    /// Used by the 3-finger gesture handler to fire system shortcuts like
+    /// Mission Control (Ctrl+↑) or "switch Space" (Ctrl+←/→).
+    func postKeyCombo(keyCode: CGKeyCode, modifiers: CGEventFlags) {
+        guard let down = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true),
+              let up   = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: false)
+        else { return }
+        down.flags = modifiers
+        up.flags = modifiers
+        down.post(tap: .cghidEventTap)
+        up.post(tap: .cghidEventTap)
+        Verbose.log(String(format: "key combo keyCode=0x%02x modifiers=0x%08x", keyCode, modifiers.rawValue))
+    }
+
+    /// Post a middle-mouse click at the current cursor position.
+    /// Used as the default 3-finger tap binding.
+    func middleClick() {
+        let p = currentCursorPosition()
+        guard let down = CGEvent(mouseEventSource: nil, mouseType: .otherMouseDown,
+                                 mouseCursorPosition: p, mouseButton: .center),
+              let up   = CGEvent(mouseEventSource: nil, mouseType: .otherMouseUp,
+                                 mouseCursorPosition: p, mouseButton: .center)
+        else { return }
+        down.post(tap: .cghidEventTap)
+        up.post(tap: .cghidEventTap)
+    }
+
     // MARK: - Scroll wheel (2-finger touch)
 
     /// Posts a pixel-precise scroll event. `dx` / `dy` are in OS scroll units
