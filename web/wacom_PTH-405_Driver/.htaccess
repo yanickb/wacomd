@@ -1,0 +1,15 @@
+# Force le MIME type correct pour le téléchargement du .pkg
+<FilesMatch "\.pkg$">
+    Header set Content-Type "application/octet-stream"
+    Header set Content-Disposition "attachment"
+</FilesMatch>
+
+# Cache long pour la mascotte (immutable)
+<FilesMatch "\.(png|ico|svg)$">
+    Header set Cache-Control "public, max-age=2592000, immutable"
+</FilesMatch>
+
+# HTML : pas de cache (mais ETag)
+<FilesMatch "\.html$">
+    Header set Cache-Control "public, max-age=600"
+</FilesMatch>

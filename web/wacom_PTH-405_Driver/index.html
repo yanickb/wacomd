@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>wacomd — driver libre Wacom Intuos Pro Small sur macOS Tahoe</title>
+<meta name="description" content="Pilote userspace open-source et app de paramétrage pour la Wacom Intuos Pro Small (PTH-451) sur macOS 26 Tahoe. Stylet, pression 2048 niveaux, gomme, gestes tactiles 1/2/3 doigts.">
+<meta property="og:title" content="wacomd — driver libre Wacom PTH-451 sur macOS Tahoe">
+<meta property="og:description" content="Stylet, pression, tactile multi-doigts. Driver gratuit, app de réglages payante.">
+<meta property="og:image" content="ghost.png">
+<meta property="og:type" content="website">
+<link rel="icon" href="ghost.png" type="image/png">
+<style>
+  :root {
+    --bg: #050a18;
+    --bg-soft: #0c1428;
+    --card: #11192e;
+    --border: #1d2a4a;
+    --accent: #4ea0ff;
+    --accent-glow: rgba(78,160,255,0.35);
+    --text: #f1f5fb;
+    --muted: #93a3c2;
+    --good: #59d28e;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
+    color: var(--text);
+    background:
+      radial-gradient(1100px 700px at 50% -200px, rgba(78,160,255,0.18), transparent 60%),
+      radial-gradient(800px 500px at 90% 30%, rgba(78,160,255,0.08), transparent 60%),
+      var(--bg);
+    min-height: 100vh;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, pre {
+    font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+    font-size: 0.92em;
+    color: #c7d2e8;
+  }
+  pre {
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    overflow-x: auto;
+  }
+
+  /* layout */
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+  header.top {
+    padding: 22px 0;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  header.top a.logo {
+    display: flex; align-items: center; gap: 10px;
+    color: var(--text); font-weight: 600; font-size: 18px;
+  }
+  header.top a.logo img { width: 32px; height: 32px; border-radius: 7px; }
+  header.top nav { display: flex; gap: 22px; font-size: 14.5px; }
+  header.top nav a { color: var(--muted); }
+  header.top nav a:hover { color: var(--text); text-decoration: none; }
+
+  /* hero */
+  .hero { padding: 56px 0 72px; text-align: center; }
+  .hero .mascot {
+    width: 220px; height: 220px;
+    border-radius: 36px;
+    box-shadow: 0 25px 60px -10px var(--accent-glow), 0 8px 24px rgba(0,0,0,0.5);
+    margin: 0 auto 28px;
+    display: block;
+  }
+  .hero .tag {
+    display: inline-block;
+    color: var(--accent);
+    background: rgba(78,160,255,0.08);
+    border: 1px solid rgba(78,160,255,0.25);
+    border-radius: 999px;
+    padding: 5px 14px;
+    font-size: 13px;
+    letter-spacing: 0.02em;
+    margin-bottom: 18px;
+  }
+  .hero h1 {
+    font-size: clamp(34px, 5vw, 56px);
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    font-weight: 700;
+    margin-bottom: 18px;
+  }
+  .hero p.lead {
+    font-size: 18px;
+    color: var(--muted);
+    max-width: 640px;
+    margin: 0 auto 32px;
+  }
+  .hero .ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 13px 22px;
+    border-radius: 11px;
+    font-weight: 600;
+    font-size: 15px;
+    border: 1px solid transparent;
+    transition: transform 0.08s ease, box-shadow 0.2s ease, background 0.2s ease;
+  }
+  .btn:hover { text-decoration: none; transform: translateY(-1px); }
+  .btn-primary {
+    background: var(--accent);
+    color: #02112b;
+    box-shadow: 0 8px 30px -8px var(--accent-glow);
+  }
+  .btn-primary:hover { background: #7bb6ff; }
+  .btn-ghost {
+    color: var(--text);
+    border-color: var(--border);
+    background: rgba(255,255,255,0.02);
+  }
+  .btn-ghost:hover { background: rgba(255,255,255,0.05); border-color: #2c3d63; }
+
+  /* sections */
+  section { padding: 56px 0; }
+  section h2 {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin-bottom: 10px;
+  }
+  section .sub { color: var(--muted); margin-bottom: 32px; max-width: 600px; }
+
+  /* pricing */
+  .pricing { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  @media (max-width: 720px) { .pricing { grid-template-columns: 1fr; } }
+  .price-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 30px 28px;
+    position: relative;
+  }
+  .price-card .label {
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+  .price-card h3 { font-size: 22px; margin-bottom: 8px; }
+  .price-card .price {
+    font-size: 36px; font-weight: 700; letter-spacing: -0.02em;
+    margin: 14px 0;
+  }
+  .price-card .price small {
+    font-size: 14px; font-weight: 400; color: var(--muted);
+    margin-left: 4px;
+  }
+  .price-card ul { list-style: none; margin: 16px 0 24px; }
+  .price-card ul li {
+    color: var(--muted);
+    padding: 5px 0 5px 24px;
+    position: relative;
+    font-size: 14.5px;
+  }
+  .price-card ul li::before {
+    content: ""; position: absolute; left: 0; top: 12px;
+    width: 14px; height: 14px;
+    background: var(--good);
+    -webkit-mask: url("data:image/svg+xml;utf8,<svg viewBox='0 0 14 14' xmlns='http://www.w3.org/2000/svg'><path d='M2 7l3 3 7-7' stroke='black' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>") center/contain no-repeat;
+            mask: url("data:image/svg+xml;utf8,<svg viewBox='0 0 14 14' xmlns='http://www.w3.org/2000/svg'><path d='M2 7l3 3 7-7' stroke='black' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>") center/contain no-repeat;
+  }
+  .price-card.featured {
+    border-color: rgba(78,160,255,0.45);
+    box-shadow: 0 0 0 1px rgba(78,160,255,0.15), 0 30px 80px -25px var(--accent-glow);
+  }
+  .price-card .badge {
+    position: absolute; top: 18px; right: 18px;
+    background: rgba(89,210,142,0.15); color: var(--good);
+    border: 1px solid rgba(89,210,142,0.35);
+    border-radius: 999px;
+    font-size: 11.5px; letter-spacing: 0.05em;
+    padding: 4px 10px;
+    text-transform: uppercase;
+  }
+
+  /* features */
+  .features { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 22px; }
+  @media (max-width: 720px) { .features { grid-template-columns: 1fr; } }
+  .feature {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px 20px;
+  }
+  .feature h4 { font-size: 15px; margin-bottom: 6px; }
+  .feature p { font-size: 14px; color: var(--muted); line-height: 1.5; }
+
+  /* tech */
+  .tech-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 28px;
+  }
+  @media (max-width: 720px) { .tech-grid { grid-template-columns: 1fr; } }
+  .tech-grid h3 { font-size: 18px; margin-bottom: 10px; }
+  .tech-grid p, .tech-grid li { font-size: 14.5px; color: var(--muted); line-height: 1.65; }
+  .tech-grid ul { margin-left: 18px; }
+
+  /* footer */
+  footer {
+    border-top: 1px solid var(--border);
+    margin-top: 80px;
+    padding: 30px 0 40px;
+    color: var(--muted);
+    font-size: 13.5px;
+    text-align: center;
+  }
+  footer p { margin: 4px 0; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header class="top">
+    <a class="logo" href="#"><img src="ghost.png" alt=""> wacomd</a>
+    <nav>
+      <a href="#telecharger">Télécharger</a>
+      <a href="#fonctionnalites">Fonctionnalités</a>
+      <a href="#technique">Technique</a>
+      <a href="https://github.com/yanickb/wacomd" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </header>
+
+  <section class="hero">
+    <img class="mascot" src="ghost.png" alt="">
+    <span class="tag">macOS 26 Tahoe · Apple Silicon</span>
+    <h1>Ramène ta Wacom Intuos Pro Small à la vie.</h1>
+    <p class="lead">
+      Wacom n'écrit plus de pilote pour la PTH-451 sur les macOS récents.
+      <strong>wacomd</strong> est un driver userspace open-source qui rétablit
+      stylet, pression&nbsp;2048&nbsp;niveaux, gomme et gestes tactiles
+      multi-doigts — sans extension noyau, sans driver Wacom officiel.
+    </p>
+    <div class="ctas">
+      <a class="btn btn-primary" href="#telecharger">Télécharger le driver gratuit</a>
+      <a class="btn btn-ghost" href="https://github.com/yanickb/wacomd" target="_blank" rel="noopener">Code source</a>
+    </div>
+  </section>
+
+  <section id="telecharger">
+    <h2>Driver gratuit, app de paramétrage payante</h2>
+    <p class="sub">
+      Le driver est et restera libre et gratuit. L'app de réglages
+      ajoute une interface de configuration en barre de menus
+      avec sliders, toggles et reload à chaud.
+    </p>
+
+    <div class="pricing">
+
+      <div class="price-card">
+        <div class="label">Open Source</div>
+        <h3>Driver wacomd</h3>
+        <div class="price">Gratuit <small>· MIT</small></div>
+        <ul>
+          <li>Stylet absolu + clic + clic droit</li>
+          <li>Pression 2048 niveaux (Photoshop, Procreate, Krita, Affinity, Clip Studio)</li>
+          <li>Détection automatique de la gomme</li>
+          <li>Tilt X / Y</li>
+          <li>Tactile&nbsp;: 1 doigt curseur, 2 doigts scroll, 3 doigts gestes système</li>
+          <li>Tap to click</li>
+          <li>Démon LaunchAgent avec reload SIGHUP</li>
+        </ul>
+        <a class="btn btn-ghost" href="wacomd-latest.pkg" download>Télécharger&nbsp;.pkg</a>
+      </div>
+
+      <div class="price-card featured">
+        <div class="badge">Pro</div>
+        <div class="label">App native macOS</div>
+        <h3>Wacomd&nbsp;Config</h3>
+        <div class="price">4,99&nbsp;€ <small>· paiement unique</small></div>
+        <ul>
+          <li>Barre de menus SwiftUI native (LSUIElement)</li>
+          <li>Sliders sensibilités curseur / scroll / 3 doigts / tap</li>
+          <li>Toggles 1 / 2 / 3 doigts + tap to click + scroll naturel</li>
+          <li>Master switch tactile (utile en dessin)</li>
+          <li>Rebinding des gestes 3 doigts (Mission Control / Spaces / etc.)</li>
+          <li>Reload à chaud du démon (pas de logout)</li>
+          <li>Signée Developer ID + notarisée</li>
+        </ul>
+        <a class="btn btn-primary" href="#acheter">Acheter</a>
+      </div>
+
+    </div>
+  </section>
+
+  <section id="fonctionnalites">
+    <h2>Ce qui fonctionne</h2>
+    <p class="sub">Testé en live sur PTH-451&nbsp;/&nbsp;macOS&nbsp;26.3 / Apple Silicon. ~200 évènements / s sur le stylet, identique au taux natif du HID Wacom.</p>
+
+    <div class="features">
+      <div class="feature">
+        <h4>Stylet absolu</h4>
+        <p>Position 1:1 sur l'écran principal, courbe de pression linéaire 11-bit reconnue par toutes les apps qui lisent <code>NSEvent.tabletPoint</code>.</p>
+      </div>
+      <div class="feature">
+        <h4>Gomme automatique</h4>
+        <p>Détectée via le toolID dans le paquet de proximité Wacom. Photoshop bascule sur l'outil gomme dès que tu retournes le stylet.</p>
+      </div>
+      <div class="feature">
+        <h4>Trackpad mode</h4>
+        <p>La surface tactile pilote le curseur en relatif comme un trackpad MacBook, avec courbe d'accélération non-linéaire et sub-pixel.</p>
+      </div>
+      <div class="feature">
+        <h4>Scroll 2 doigts</h4>
+        <p>Centroïde lissé, sub-pixel accumulator, sensibilité ajustable de 0.05 à 2.0&nbsp;px par unité tablette. Inversion "naturel / classique".</p>
+      </div>
+      <div class="feature">
+        <h4>Gestes 3 doigts</h4>
+        <p>Swipe vertical&nbsp;= Mission Control / Exposé. Swipe horizontal&nbsp;= switch Spaces. Tap&nbsp;= middle click.</p>
+      </div>
+      <div class="feature">
+        <h4>Coexiste avec Wacom</h4>
+        <p>Si le driver Wacom officiel est encore installé, un script désactive ses daemons sans rien supprimer&nbsp;— réversible.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="technique">
+    <h2>Présentation technique</h2>
+    <p class="sub">Pour les curieux et les gens qui voudraient porter wacomd vers d'autres modèles Wacom.</p>
+
+    <div class="tech-grid">
+
+      <div>
+        <h3>Architecture</h3>
+        <p>
+          Démon Swift en userspace utilisant <code>IOHIDManager</code> pour lire la
+          tablette (page vendor 0xff0d pour le stylet, page 0xff00 pour le tactile),
+          et <code>CGEvent</code> pour injecter clics, mouvements de curseur et
+          évènements <code>.tabletProximity</code>&nbsp;/&nbsp;<code>.tabletPoint</code>
+          avec pression. Aucune extension noyau, aucun entitlement Apple spécifique
+          — toutes les capabilities sensibles sont gérées par TCC au runtime.
+        </p>
+      </div>
+
+      <div>
+        <h3>Protocole stylet</h3>
+        <p>
+          Reverse-engineering du format Intuos5/Pro depuis le driver Linux
+          (<code>drivers/hid/wacom_wac.c</code>). Rapport 10 octets, Report ID 2&nbsp;:
+        </p>
+        <ul>
+          <li><code>X = (b[2]&lt;&lt;9) | (b[3]&lt;&lt;1) | (b[9]&gt;&gt;1)&amp;1</code></li>
+          <li><code>Y = (b[4]&lt;&lt;9) | (b[5]&lt;&lt;1) | b[9]&amp;1</code></li>
+          <li>Pression 11 bits sur <code>b[6..7]</code> + LSB dans le status byte</li>
+          <li>Proximité enter/leave sur Report ID 0xc0</li>
+        </ul>
+      </div>
+
+      <div>
+        <h3>Protocole tactile</h3>
+        <p>
+          Surface multi-touch en 12-bit packé asymétrique&nbsp;: chaque slot (5 max)
+          occupe 8 octets, l'octet de poids fort donne X ou Y, le nibble haut d'un
+          octet voisin complète les 4 bits restants. Le firmware n'expose pas
+          les ExpressKeys ni le Touch Ring via HID — ils restent inaccessibles
+          sans accès USB direct (IOUSBLib).
+        </p>
+      </div>
+
+      <div>
+        <h3>Configuration</h3>
+        <p>
+          Fichier JSON dans <code>~/Library/Application Support/wacomd/config.json</code>.
+          Le démon le recharge à la volée sur réception de <code>SIGHUP</code>,
+          envoyé automatiquement par l'app de paramétrage à chaque modification.
+          Pas besoin de redémarrer le service.
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>Compatibilité</h2>
+    <div class="tech-grid">
+      <div>
+        <h3>Système</h3>
+        <ul>
+          <li>macOS&nbsp;26 Tahoe — testé</li>
+          <li>macOS&nbsp;15 Sequoia — devrait fonctionner (API publiques inchangées)</li>
+          <li>macOS&nbsp;14 Sonoma — idem</li>
+          <li>Apple Silicon&nbsp;+ Intel</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Tablettes</h3>
+        <ul>
+          <li>Wacom Intuos Pro Small — PTH-451 (VID 0x056a / PID 0x0314) ✓ testé</li>
+          <li>Famille Intuos5&nbsp;/&nbsp;Pro — non testé mais format de rapport identique sous Linux, ajout 1-ligne dans <code>KnownModels.swift</code></li>
+          <li>Modèles Bluetooth — non supporté pour l'instant</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="acheter">
+    <h2>Acheter Wacomd Config</h2>
+    <p class="sub">
+      Une licence personnelle, paiement unique, valable sur tous tes Macs.
+      Le driver lui-même reste gratuit et open-source — pas besoin d'acheter
+      l'app pour faire fonctionner ta tablette.
+    </p>
+    <div class="price-card featured" style="max-width: 480px;">
+      <div class="label">Wacomd Config — 4,99&nbsp;€</div>
+      <p style="color: var(--muted); font-size: 14.5px; margin-top: 6px;">
+        Achat sécurisé via Stripe.
+        Téléchargement immédiat de la build signée et notarisée.
+      </p>
+      <a class="btn btn-primary" style="margin-top: 20px;" href="https://buy.stripe.com/PLACEHOLDER_LINK">Acheter — 4,99&nbsp;€</a>
+    </div>
+  </section>
+
+  <footer>
+    <p>wacomd — driver libre Wacom pour macOS · MIT · 2026</p>
+    <p>
+      <a href="https://github.com/yanickb/wacomd">GitHub</a> ·
+      <a href="https://app.thinkspark.eu/">thinkspark.eu</a> ·
+      <a href="mailto:yanick.blancho@gmail.com">contact</a>
+    </p>
+  </footer>
+
+</div>
+
+</body>
+</html>
