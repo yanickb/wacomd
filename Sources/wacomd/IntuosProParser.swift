@@ -10,6 +10,9 @@ import Foundation
 /// début du rapport, RID inclus (data[0] = report ID).
 enum IntuosProParser {
 
+    /// Report ID dédié au stylet sur les Intuos Pro.
+    static let reportID: UInt32 = 2
+
     /// Résultat du décodage d'un rapport pen.
     enum Result {
         case proximityEnter(toolID: UInt32, serial: UInt64)

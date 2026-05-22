@@ -227,6 +227,28 @@ final class EventInjector {
         }
     }
 
+    // MARK: - Scroll wheel (2-finger touch)
+
+    /// Posts a pixel-precise scroll event. `dx` / `dy` are in OS scroll units
+    /// already (i.e. the caller is responsible for sensitivity scaling).
+    func scroll(dx: Double, dy: Double) {
+        let intDy = Int32(dy.rounded())
+        let intDx = Int32(dx.rounded())
+        if intDx == 0 && intDy == 0 { return }
+
+        guard let evt = CGEvent(
+            scrollWheelEvent2Source: nil,
+            units: .pixel,
+            wheelCount: 2,
+            wheel1: intDy,
+            wheel2: intDx,
+            wheel3: 0
+        ) else { return }
+
+        evt.post(tap: .cghidEventTap)
+        Verbose.log(String(format: "scroll dy=%d dx=%d", intDy, intDx))
+    }
+
     private func tabletButtonsMask(state: PenState) -> Int64 {
         var mask: Int64 = 0
         if state.tipDown      { mask |= 0x01 }

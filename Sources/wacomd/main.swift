@@ -3,8 +3,9 @@ import Foundation
 setbuf(stdout, nil)
 
 print("""
-[wacomd] Démon de pilote Wacom pour macOS — version 0.1.0
+[wacomd] Démon de pilote Wacom pour macOS — version 0.3.0
 [wacomd] Modèle supporté actuellement: Intuos Pro Small (PTH-451)
+[wacomd] Fonctionnalités: stylet + clic + pression + scroll 2-doigts
 """)
 
 // 1. Permissions Accessibilité — déclenche la pop-up macOS la 1re fois.

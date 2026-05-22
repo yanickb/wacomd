@@ -15,12 +15,12 @@ moves / clicks / pressure into the event tap. Same approach as
 
 ## ⚠️ Scope — what this driver does NOT do
 
-**This is a pen-only driver.** It handles pen movement, clicks and pressure,
-and that's it. The following are **not implemented yet** :
+The following are **not implemented yet** :
 
 - ❌ The 6 **ExpressKeys** (the pad buttons on the side of the tablet)
 - ❌ The **Touch Ring** (the wheel)
-- ❌ The **multi-touch surface** (finger gestures on the tablet)
+- ❌ Multi-touch gestures beyond **2-finger scroll** (pinch / rotate / 3-finger
+  swipe require private SPI and are out of scope)
 
 If your workflow depends on any of those, this driver is not enough for you
 yet. They're all on the roadmap — see [Roadmap](#roadmap).
@@ -47,7 +47,7 @@ framework. Restore later with :
 ./packaging/restore-wacom-driver.sh
 ```
 
-## Status — v0.2 (tested live on macOS 26.3, Apple Silicon)
+## Status — v0.3 (tested live on macOS 26.3, Apple Silicon)
 
 | Feature                                          | Status |
 | ------------------------------------------------ | ------ |
@@ -58,10 +58,11 @@ framework. Restore later with :
 | Pressure (2048 levels) for Photoshop/Procreate/Krita/Affinity/Clip Studio | ✅     |
 | Tilt X / Y                                       | ✅     |
 | Eraser flag                                      | ✅ (signalled) |
+| **2-finger touch scroll**                        | ✅ **new** |
 | Multi-monitor configurable mapping               | ❌ primary screen |
-| ExpressKeys (6 buttons)                          | ❌ TODO |
-| Touch Ring                                       | ❌ TODO |
-| Multi-touch surface                              | ❌ TODO |
+| ExpressKeys (6 buttons)                          | ❌ TODO v0.4 |
+| Touch Ring                                       | ❌ TODO v0.5 |
+| Multi-touch gestures (pinch / rotate)            | ❌ private SPI required |
 | Configuration UI                                 | ❌ TODO |
 
 Roughly **200 events/s sustained** in the live test, which matches the

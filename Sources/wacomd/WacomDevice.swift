@@ -5,23 +5,31 @@ import IOKit.hid
 /// stylet. Tous les rapports pen (X/Y/pression/tilt) arrivent ici, en raw.
 private let wacomDigitizerUsagePage = 0xff0d
 
+/// Page HID vendor pour l'interface tactile (multi-touch surface).
+/// Rapports Report ID 2 de longueur 64 quand des doigts sont en contact.
+private let wacomTouchUsagePage = 0xff00
+
 final class WacomDevice {
     private let device: IOHIDDevice
     let model: WacomModel
     private let injector: EventInjector
+    private let touchTracker: TouchTracker
     private var state = PenState()
     private var reportBuffer = [UInt8](repeating: 0, count: 64)
     private let usagePage: Int
     private let usage: Int
     private let interfaceLabel: String
     private let isPenInterface: Bool
+    private let isTouchInterface: Bool
 
     var modelName: String { model.name }
 
     init(device: IOHIDDevice, model: WacomModel) {
         self.device = device
         self.model = model
-        self.injector = EventInjector()
+        let injector = EventInjector()
+        self.injector = injector
+        self.touchTracker = TouchTracker(injector: injector)
 
         let pu  = (IOHIDDeviceGetProperty(device, kIOHIDPrimaryUsageKey as CFString) as? Int) ?? 0
         let pup = (IOHIDDeviceGetProperty(device, kIOHIDPrimaryUsagePageKey as CFString) as? Int) ?? 0
@@ -29,6 +37,7 @@ final class WacomDevice {
         self.usage = pu
         self.interfaceLabel = String(format: "page=0x%02x usage=0x%02x", pup, pu)
         self.isPenInterface = (pup == wacomDigitizerUsagePage)
+        self.isTouchInterface = (pup == wacomTouchUsagePage)
     }
 
     func start() {
@@ -64,6 +73,42 @@ final class WacomDevice {
         } else {
             Verbose.log("Ouvert interface \(interfaceLabel) (penInterface=\(isPenInterface))")
             dumpElements()
+            if isPenInterface {
+                enableWacomVendorMode()
+            }
+        }
+    }
+
+    /// Send the magic Feature Reports that switch the tablet from
+    /// HID-mouse-fallback to Wacom-vendor mode (raw 10-byte pen reports +
+    /// multi-touch reports on Report ID 13).
+    ///
+    /// Linux reference : `wacom_query_tablet_data` in `drivers/hid/wacom_wac.c`
+    /// — for the Intuos5/Pro family this sends `Feature Report 0x02` with
+    /// payload `[mode]` where mode = 2 enables full vendor mode.
+    ///
+    /// We try a few known incantations and log which one (if any) succeeds.
+    private func enableWacomVendorMode() {
+        // Variants observed across Wacom families. Each tuple is
+        // (reportID, payload). We try them in order; once one succeeds the
+        // others are harmless retries.
+        let variants: [(reportID: CFIndex, payload: [UInt8])] = [
+            (0x02, [0x02]),         // mode = digitizer + touch
+            (0x02, [0x02, 0x02]),   // some firmwares expect both bytes
+            (0x03, [0x04]),         // Intuos Pro 2/Pro family fallback
+            (0x0D, [0x01]),         // touch-only enable
+        ]
+
+        for v in variants {
+            let r = v.payload.withUnsafeBufferPointer { buf -> IOReturn in
+                IOHIDDeviceSetReport(device,
+                                     kIOHIDReportTypeFeature,
+                                     v.reportID,
+                                     buf.baseAddress!,
+                                     buf.count)
+            }
+            let hex = String(format: "0x%08x", r)
+            Verbose.log("SetReport Feature id=\(v.reportID) payload=\(v.payload.map { String(format: "%02x", $0) }.joined()) → \(hex)")
         }
     }
 
@@ -92,13 +137,31 @@ final class WacomDevice {
         guard let report = report, length > 0 else { return }
 
         if Verbose.enabled {
-            let bytes = (0..<min(Int(length), 16)).map { String(format: "%02x", report[$0]) }.joined(separator: " ")
-            Verbose.log("rapport id=\(id) len=\(length) [\(interfaceLabel)] : \(bytes)\(length > 16 ? " …" : "")")
+            let bytes = (0..<min(Int(length), 24)).map { String(format: "%02x", report[$0]) }.joined(separator: " ")
+            Verbose.log("rapport id=\(id) len=\(length) [\(interfaceLabel)] : \(bytes)\(length > 24 ? " …" : "")")
         }
 
-        guard isPenInterface else { return }
+        // The mouse-fallback interface (page 0x01) duplicates the pen data
+        // as standard HID mouse — we ignore it to avoid double events.
+        // Pen interface (0xff0d) and touch interface (0xff00) both pass.
+        guard isPenInterface || isTouchInterface else { return }
 
-        switch IntuosProParser.decode(reportID: id, data: report, length: Int(length)) {
+        if isPenInterface {
+            // Pen interface only emits Report ID 2 with length 10 for
+            // movement and ID 192 (0xc0) for proximity transitions.
+            // We route both into the pen parser.
+            handlePenReport(data: report, length: Int(length), id: id)
+        } else if isTouchInterface {
+            // Touch interface also uses Report ID 2 but with length 64.
+            // Disambiguation is done inside the parser by inspecting the
+            // status byte.
+            let contacts = IntuosProTouchParser.decode(data: report, length: Int(length))
+            touchTracker.handleFrame(contacts: contacts)
+        }
+    }
+
+    private func handlePenReport(data: UnsafeMutablePointer<UInt8>, length: Int, id: UInt32) {
+        switch IntuosProParser.decode(reportID: id, data: data, length: length) {
         case .ignored:
             return
         case .proximityLeave:
