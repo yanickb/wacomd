@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Merci pour ton achat — Wacomd Config</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#050a18">
+<link rel="icon" href="ghost.png" type="image/png">
+<link rel="stylesheet" href="styles.css">
+<style>
+  .thanks-card {
+    max-width: 520px;
+    margin: 80px auto 40px;
+    text-align: center;
+    background: var(--card);
+    border: 1px solid rgba(89, 210, 142, 0.45);
+    border-radius: 20px;
+    padding: 40px 32px;
+    box-shadow: 0 30px 80px -25px var(--good-glow);
+  }
+  .check-icon {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 22px;
+    border-radius: 50%;
+    background: var(--good-glow);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: pop 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .check-icon svg { width: 32px; height: 32px; color: var(--good); }
+  @keyframes pop {
+    0%   { opacity: 0; transform: scale(0.4); }
+    60%  { opacity: 1; transform: scale(1.08); }
+    100% { transform: scale(1); }
+  }
+  .thanks-card h1 {
+    font-size: 26px;
+    letter-spacing: -0.01em;
+    margin-bottom: 10px;
+  }
+  .thanks-card p {
+    color: var(--muted);
+    margin-bottom: 24px;
+    line-height: 1.6;
+    font-size: 15px;
+  }
+  .thanks-card .btn { width: 100%; justify-content: center; }
+  .thanks-card .receipt-note {
+    margin-top: 20px;
+    font-size: 13px;
+    color: var(--muted-soft);
+  }
+  .lang-link {
+    text-align: center;
+    margin-top: 10px;
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header class="top">
+    <a class="logo" href="index.html"><img src="ghost.png" alt=""> wacomd</a>
+    <nav>
+      <div class="lang-switch">
+        <a href="merci.html" class="active">FR</a>
+        <a href="merci.en.html">EN</a>
+      </div>
+    </nav>
+  </header>
+
+  <div class="thanks-card">
+    <div class="check-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M5 12l5 5L20 7"/>
+      </svg>
+    </div>
+
+    <h1>Merci pour ton achat&nbsp;!</h1>
+    <p>
+      Ton paiement a été confirmé par Stripe.
+      Un reçu est en route vers l'adresse e-mail que tu as fournie.
+      Tu peux télécharger l'app de paramétrage dès maintenant.
+    </p>
+
+    <a class="btn btn-primary" href="wacomd-config-latest.pkg" download>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;" aria-hidden="true">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="7 10 12 15 17 10"/>
+        <line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+      Télécharger Wacomd&nbsp;Config
+    </a>
+
+    <p class="receipt-note">
+      Le téléchargement reste disponible à cette adresse. Garde le lien
+      dans tes favoris ou retrouve-le dans l'e-mail Stripe.
+    </p>
+  </div>
+
+  <p class="lang-link">
+    Need a problem solved? <a href="mailto:yanick.blancho@gmail.com">yanick.blancho@gmail.com</a>
+  </p>
+
+  <footer>
+    <p>wacomd — driver libre Wacom pour macOS · MIT · 2026</p>
+    <p>
+      <a href="index.html">Retour à l'accueil</a> ·
+      <a href="https://github.com/yanickb/wacomd">GitHub</a> ·
+      <a href="https://app.thinkspark.eu/">thinkspark.eu</a>
+    </p>
+  </footer>
+
+</div>
+
+</body>
+</html>
