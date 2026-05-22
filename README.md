@@ -130,7 +130,27 @@ Verbose mode (HID dumps, throughput counter) :
 WACOMD_VERBOSE=1 .build/release/wacomd
 ```
 
-## Install as a LaunchAgent (auto-start on login)
+## Simplest persistence : launch from Terminal
+
+If the Terminal app you use already has the two permissions granted (which
+is the common dev setup on macOS), the easiest way to keep wacomd running
+is just :
+
+```bash
+./packaging/start.sh
+```
+
+It nohups + disowns the daemon so it survives the terminal closing, and
+the daemon **inherits the terminal's privacy permissions** (no need to
+grant Accessibility / Input Monitoring to `wacomd` itself).
+
+After a reboot, just open a terminal and run the script again. To stop :
+
+```bash
+pkill -TERM -f '.build/release/wacomd'
+```
+
+## Install as a LaunchAgent (auto-start on login — requires explicit permissions)
 
 ```bash
 INSTALL_DIR="$HOME/Library/Application Support/wacomd"
@@ -145,10 +165,12 @@ launchctl kickstart -k gui/$(id -u)/com.local.wacomd
 
 Logs go to `/tmp/wacomd.log`.
 
-⚠️ When launched by `launchd` (rather than from a Terminal) the daemon has its
-**own privacy identity** — you'll have to grant Accessibility and Input
+⚠️ When launched by `launchd` (rather than from a Terminal), the daemon has
+its **own privacy identity** — you'll have to grant Accessibility and Input
 Monitoring to the installed binary at
-`/Users/<you>/Library/Application Support/wacomd/wacomd` explicitly.
+`/Users/<you>/Library/Application Support/wacomd/wacomd` explicitly. The
+Terminal-launched path above doesn't require this because permissions are
+inherited from the parent process.
 
 To uninstall :
 
