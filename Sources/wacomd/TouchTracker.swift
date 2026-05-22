@@ -114,6 +114,8 @@ final class TouchTracker {
                 }
                 smoothedCursor = smoothed
                 injector.moveCursor(to: smoothed)
+                Verbose.log(String(format: "1f raw=(%.0f,%.0f) smooth=(%.0f,%.0f)",
+                                   raw.x, raw.y, smoothed.x, smoothed.y))
             }
             lastScrollCentroidScreen = nil
         case 2:

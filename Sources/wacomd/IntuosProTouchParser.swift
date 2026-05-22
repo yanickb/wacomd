@@ -83,17 +83,18 @@ enum IntuosProTouchParser {
             let validSlotID = (slotID >= 0x02 && slotID < 0x20)
             if !validSlotID || pressureByte == 0 { continue }
 
-            // X / Y are encoded as 16-bit big-endian values, like in the
-            // original v0.3 scroll path. The previous 12-bit packed
-            // interpretation mixed nibbles between axes and caused
-            // 256-unit cursor jumps for sub-pixel finger movements.
-            //
-            //   X = (b[1] << 8) | b[2]
-            //   Y = (b[3] << 8) | b[4]
-            //
-            // Range observed in practice : 0..~0xC000.
-            let x = (Int(data[off + 1]) << 8) | Int(data[off + 2])
-            let y = (Int(data[off + 3]) << 8) | Int(data[off + 4])
+            // The user reported that with X = (b[+1] << 8) | b[+2] the
+            // cursor's X axis was stuck on the center vertical line while
+            // Y tracked finger motion correctly. That suggests bytes +1
+            // and +2 don't carry the X coordinate. Try swapping : use
+            // bytes +3, +4 for X and +1, +2 for Y.
+            let x = (Int(data[off + 3]) << 8) | Int(data[off + 4])
+            let y = (Int(data[off + 1]) << 8) | Int(data[off + 2])
+
+            if Verbose.enabled {
+                let raw = (0..<8).map { String(format: "%02x", data[off + $0]) }.joined(separator: " ")
+                Verbose.log("touch slot=\(slotID) bytes=[\(raw)] → x=\(x) y=\(y)")
+            }
 
             contacts.append(TouchContact(
                 slotID: slotID,
