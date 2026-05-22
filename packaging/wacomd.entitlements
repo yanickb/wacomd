@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+        Hardened runtime is required for notarisation, but wacomd doesn't
+        need any special opt-in (no JIT, no dyld-bypass, no Apple Events
+        scripting). All sensitive capabilities (HID read, CGEvent post)
+        are gated by TCC at runtime and granted by the user via System
+        Settings → Privacy & Security.
+    -->
+</dict>
+</plist>

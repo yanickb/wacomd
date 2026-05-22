@@ -94,8 +94,34 @@ ${ICON_KEY}
 </plist>
 EOF
 
-# Ad-hoc sign so macOS Gatekeeper accepts the bundle locally.
-codesign --force --deep --sign - "$APP_DIR" >/dev/null 2>&1 || true
+# ---- Sign with Developer ID Application -----------------------------------
+# When packaging/signing.env is present, use the real Developer ID identity
+# + hardened runtime so the result is notarisable. Otherwise fall back to
+# ad-hoc signing for purely local development.
+SIGNING_ENV="$REPO_DIR/packaging/signing.env"
+ENTITLEMENTS="$REPO_DIR/packaging/wacomd.entitlements"
+if [ -f "$SIGNING_ENV" ]; then
+    # shellcheck disable=SC1090
+    source "$SIGNING_ENV"
+    echo "==> Sign with Developer ID Application (hardened runtime)"
+    # The daemon binary inside the bundle (if any) must be signed before the
+    # outer bundle. Sign every Mach-O found in the bundle.
+    find "$APP_DIR/Contents" -type f -perm -u+x | while read -r exe; do
+        codesign --force --options=runtime --timestamp \
+                 --entitlements "$ENTITLEMENTS" \
+                 --sign "$SIGN_APP" "$exe" 2>/dev/null || true
+    done
+    # Finally sign the bundle itself (--deep wraps any remaining unsigned
+    # nested code).
+    codesign --force --deep --options=runtime --timestamp \
+             --entitlements "$ENTITLEMENTS" \
+             --sign "$SIGN_APP" "$APP_DIR"
+    # Verify
+    codesign --verify --deep --strict --verbose=2 "$APP_DIR" 2>&1 | tail -3
+else
+    echo "==> Ad-hoc sign (no signing.env — local build only, not notarisable)"
+    codesign --force --deep --sign - "$APP_DIR" >/dev/null 2>&1 || true
+fi
 
 echo "✓ Built : $APP_DIR"
 echo

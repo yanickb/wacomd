@@ -21,6 +21,17 @@ PKG_NAME="wacomd-${VERSION}.pkg"
 
 mkdir -p "$OUT_DIR"
 
+# Pick up signing identities if available.
+SIGNING_ENV="$REPO_DIR/packaging/signing.env"
+ENTITLEMENTS="$REPO_DIR/packaging/wacomd.entitlements"
+if [ -f "$SIGNING_ENV" ]; then
+    # shellcheck disable=SC1090
+    source "$SIGNING_ENV"
+else
+    SIGN_APP=""
+    SIGN_PKG=""
+fi
+
 # ============================================================================
 # 1. Build the .app (which also rebuilds the daemon as a side effect)
 # ============================================================================
@@ -28,6 +39,16 @@ mkdir -p "$OUT_DIR"
 
 DAEMON_BIN="$REPO_DIR/.build/release/wacomd"
 APP_BUNDLE="$OUT_DIR/Wacomd Config.app"
+
+# Sign the standalone daemon binary that will live at /usr/local/bin/wacomd.
+# (The build-app.sh script already signed the copy inside the .app bundle.)
+if [ -n "$SIGN_APP" ]; then
+    echo "==> Sign daemon binary (Developer ID Application + hardened runtime)"
+    codesign --force --options=runtime --timestamp \
+             --entitlements "$ENTITLEMENTS" \
+             --sign "$SIGN_APP" "$DAEMON_BIN"
+    codesign --verify --strict --verbose=2 "$DAEMON_BIN" 2>&1 | tail -2
+fi
 
 # ============================================================================
 # 2. App Store-ready 1024×1024 RGB PNG (no alpha)
@@ -153,10 +174,20 @@ cat > "$DISTRIBUTION_XML" <<EOF
 </installer-gui-script>
 EOF
 
-productbuild \
-    --distribution "$DISTRIBUTION_XML" \
-    --package-path "$OUT_DIR" \
-    "$OUT_DIR/$PKG_NAME" >/dev/null
+PRODUCTBUILD_ARGS=(
+    --distribution "$DISTRIBUTION_XML"
+    --package-path "$OUT_DIR"
+)
+if [ -n "$SIGN_PKG" ]; then
+    PRODUCTBUILD_ARGS+=( --sign "$SIGN_PKG" --timestamp )
+    echo "==> Sign .pkg with Developer ID Installer"
+fi
+productbuild "${PRODUCTBUILD_ARGS[@]}" "$OUT_DIR/$PKG_NAME" >/dev/null
+
+if [ -n "$SIGN_PKG" ]; then
+    # Confirm the .pkg signature with the system tool used by macOS itself.
+    pkgutil --check-signature "$OUT_DIR/$PKG_NAME" | sed -n '1,6p'
+fi
 
 # ============================================================================
 # 6. Apply the ghost icon to the .pkg file itself (Finder thumbnail)
