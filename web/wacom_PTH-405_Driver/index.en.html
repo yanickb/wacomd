@@ -1,12 +1,12 @@
 <!doctype html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>wacomd — driver libre Wacom Intuos Pro Small sur macOS Tahoe</title>
-<meta name="description" content="Pilote userspace open-source et app de paramétrage pour la Wacom Intuos Pro Small (PTH-451) sur macOS 26 Tahoe. Stylet, pression 2048 niveaux, gomme, gestes tactiles 1/2/3 doigts.">
-<meta property="og:title" content="wacomd — driver libre Wacom PTH-451 sur macOS Tahoe">
-<meta property="og:description" content="Stylet, pression, tactile multi-doigts. Driver gratuit, app de réglages payante.">
+<title>wacomd — open-source Wacom Intuos Pro Small driver for macOS Tahoe</title>
+<meta name="description" content="Userspace open-source driver and configurator app for the Wacom Intuos Pro Small (PTH-451) on macOS 26 Tahoe. Pen, 2048-level pressure, eraser, 1/2/3-finger touch gestures.">
+<meta property="og:title" content="wacomd — open-source Wacom PTH-451 driver for macOS Tahoe">
+<meta property="og:description" content="Pen, pressure, multi-finger touch. Free driver, paid configurator app.">
 <meta property="og:image" content="ghost.png">
 <meta property="og:type" content="website">
 <link rel="icon" href="ghost.png" type="image/png">
@@ -50,7 +50,6 @@
     overflow-x: auto;
   }
 
-  /* layout */
   .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
   header.top {
     padding: 22px 0;
@@ -93,7 +92,6 @@
     background: rgba(78,160,255,0.12);
   }
 
-  /* hero */
   .hero { padding: 56px 0 72px; text-align: center; }
   .hero .mascot {
     width: 220px; height: 220px;
@@ -150,7 +148,6 @@
   }
   .btn-ghost:hover { background: rgba(255,255,255,0.05); border-color: #2c3d63; }
 
-  /* sections */
   section { padding: 56px 0; }
   section h2 {
     font-size: 28px;
@@ -160,7 +157,6 @@
   }
   section .sub { color: var(--muted); margin-bottom: 32px; max-width: 600px; }
 
-  /* pricing */
   .pricing { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
   @media (max-width: 720px) { .pricing { grid-template-columns: 1fr; } }
   .price-card {
@@ -214,7 +210,6 @@
     text-transform: uppercase;
   }
 
-  /* features */
   .features { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 22px; }
   @media (max-width: 720px) { .features { grid-template-columns: 1fr; } }
   .feature {
@@ -226,7 +221,6 @@
   .feature h4 { font-size: 15px; margin-bottom: 6px; }
   .feature p { font-size: 14px; color: var(--muted); line-height: 1.5; }
 
-  /* tech */
   .tech-grid {
     display: grid; grid-template-columns: 1fr 1fr; gap: 28px;
   }
@@ -235,7 +229,6 @@
   .tech-grid p, .tech-grid li { font-size: 14.5px; color: var(--muted); line-height: 1.65; }
   .tech-grid ul { margin-left: 18px; }
 
-  /* footer */
   footer {
     border-top: 1px solid var(--border);
     margin-top: 80px;
@@ -254,12 +247,12 @@
   <header class="top">
     <a class="logo" href="#"><img src="ghost.png" alt=""> wacomd</a>
     <nav>
-      <a href="#telecharger">Télécharger</a>
-      <a href="#fonctionnalites">Fonctionnalités</a>
-      <a href="#technique">Technique</a>
+      <a href="#download">Download</a>
+      <a href="#features">Features</a>
+      <a href="#tech">Technical</a>
       <div class="lang-switch">
-        <a href="index.html" class="active">FR</a>
-        <a href="index.en.html">EN</a>
+        <a href="index.html">FR</a>
+        <a href="index.en.html" class="active">EN</a>
       </div>
       <a href="https://github.com/yanickb/wacomd" target="_blank" rel="noopener" class="github">
         <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
@@ -271,150 +264,151 @@
   <section class="hero">
     <img class="mascot" src="ghost.png" alt="">
     <span class="tag">macOS 26 Tahoe · Apple Silicon</span>
-    <h1>Ramène ta Wacom Intuos Pro Small à la vie.</h1>
+    <h1>Bring your Wacom Intuos Pro Small back to life.</h1>
     <p class="lead">
-      Wacom n'écrit plus de pilote pour la PTH-451 sur les macOS récents.
-      <strong>wacomd</strong> est un driver userspace open-source qui rétablit
-      stylet, pression&nbsp;2048&nbsp;niveaux, gomme et gestes tactiles
-      multi-doigts — sans extension noyau, sans driver Wacom officiel.
+      Wacom no longer ships a driver for the PTH-451 on recent macOS releases.
+      <strong>wacomd</strong> is a userspace open-source driver that restores
+      pen input, 2048-level pressure, eraser detection and multi-finger touch
+      gestures — no kernel extension, no Wacom official driver needed.
     </p>
     <div class="ctas">
-      <a class="btn btn-primary" href="#telecharger">Télécharger le driver gratuit</a>
+      <a class="btn btn-primary" href="#download">Download the free driver</a>
       <a class="btn btn-ghost" href="https://github.com/yanickb/wacomd" target="_blank" rel="noopener">
         <svg viewBox="0 0 16 16" fill="currentColor" style="width:16px;height:16px;"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-        Voir sur GitHub
+        View on GitHub
       </a>
     </div>
   </section>
 
-  <section id="telecharger">
-    <h2>Driver gratuit, app de paramétrage payante</h2>
+  <section id="download">
+    <h2>Free driver, paid configurator app</h2>
     <p class="sub">
-      Le driver est et restera libre et gratuit. L'app de réglages
-      ajoute une interface de configuration en barre de menus
-      avec sliders, toggles et reload à chaud.
+      The driver is and will stay free and open-source. The configurator app
+      adds a menu-bar settings interface with live sliders, toggles and
+      hot-reload of the daemon.
     </p>
 
     <div class="pricing">
 
       <div class="price-card">
         <div class="label">Open Source</div>
-        <h3>Driver wacomd</h3>
-        <div class="price">Gratuit <small>· MIT</small></div>
+        <h3>wacomd driver</h3>
+        <div class="price">Free <small>· MIT</small></div>
         <ul>
-          <li>Stylet absolu + clic + clic droit</li>
-          <li>Pression 2048 niveaux (Photoshop, Procreate, Krita, Affinity, Clip Studio)</li>
-          <li>Détection automatique de la gomme</li>
+          <li>Absolute pen + left click + right click</li>
+          <li>2048-level pressure (Photoshop, Procreate, Krita, Affinity, Clip Studio)</li>
+          <li>Automatic eraser detection</li>
           <li>Tilt X / Y</li>
-          <li>Tactile&nbsp;: 1 doigt curseur, 2 doigts scroll, 3 doigts gestes système</li>
+          <li>Touch: 1-finger cursor, 2-finger scroll, 3-finger system gestures</li>
           <li>Tap to click</li>
-          <li>Démon LaunchAgent avec reload SIGHUP</li>
+          <li>LaunchAgent daemon with SIGHUP hot-reload</li>
         </ul>
-        <a class="btn btn-ghost" href="wacomd-latest.pkg" download>Télécharger&nbsp;.pkg</a>
+        <a class="btn btn-ghost" href="wacomd-latest.pkg" download>Download&nbsp;.pkg</a>
       </div>
 
       <div class="price-card featured">
         <div class="badge">Pro</div>
-        <div class="label">App native macOS</div>
+        <div class="label">Native macOS app</div>
         <h3>Wacomd&nbsp;Config</h3>
-        <div class="price">4,99&nbsp;€ <small>· paiement unique</small></div>
+        <div class="price">€4.99 <small>· one-time payment</small></div>
         <ul>
-          <li>Barre de menus SwiftUI native (LSUIElement)</li>
-          <li>Sliders sensibilités curseur / scroll / 3 doigts / tap</li>
-          <li>Toggles 1 / 2 / 3 doigts + tap to click + scroll naturel</li>
-          <li>Master switch tactile (utile en dessin)</li>
-          <li>Rebinding des gestes 3 doigts (Mission Control / Spaces / etc.)</li>
-          <li>Reload à chaud du démon (pas de logout)</li>
-          <li>Signée Developer ID + notarisée</li>
+          <li>Native SwiftUI menu-bar app (LSUIElement)</li>
+          <li>Sliders for cursor / scroll / 3-finger / tap sensitivities</li>
+          <li>Toggles for 1 / 2 / 3-finger + tap-to-click + natural scroll</li>
+          <li>Master touch switch (handy when drawing)</li>
+          <li>Rebind 3-finger gestures (Mission Control / Spaces / etc.)</li>
+          <li>Hot-reload the daemon (no logout needed)</li>
+          <li>Developer ID signed + Apple notarised</li>
         </ul>
-        <a class="btn btn-primary" href="#acheter">Acheter</a>
+        <a class="btn btn-primary" href="#buy">Buy</a>
       </div>
 
     </div>
   </section>
 
-  <section id="fonctionnalites">
-    <h2>Ce qui fonctionne</h2>
-    <p class="sub">Testé en live sur PTH-451&nbsp;/&nbsp;macOS&nbsp;26.3 / Apple Silicon. ~200 évènements / s sur le stylet, identique au taux natif du HID Wacom.</p>
+  <section id="features">
+    <h2>What works</h2>
+    <p class="sub">Tested live on PTH-451 / macOS 26.3 / Apple Silicon. ~200 events/s on the pen, matching the Wacom HID native rate.</p>
 
     <div class="features">
       <div class="feature">
-        <h4>Stylet absolu</h4>
-        <p>Position 1:1 sur l'écran principal, courbe de pression linéaire 11-bit reconnue par toutes les apps qui lisent <code>NSEvent.tabletPoint</code>.</p>
+        <h4>Absolute pen</h4>
+        <p>1:1 position mapping to the primary screen, linear 11-bit pressure curve read by every app that consumes <code>NSEvent.tabletPoint</code>.</p>
       </div>
       <div class="feature">
-        <h4>Gomme automatique</h4>
-        <p>Détectée via le toolID dans le paquet de proximité Wacom. Photoshop bascule sur l'outil gomme dès que tu retournes le stylet.</p>
+        <h4>Automatic eraser</h4>
+        <p>Detected from the toolID in the Wacom proximity packet. Photoshop switches to the eraser tool the moment you flip the pen.</p>
       </div>
       <div class="feature">
         <h4>Trackpad mode</h4>
-        <p>La surface tactile pilote le curseur en relatif comme un trackpad MacBook, avec courbe d'accélération non-linéaire et sub-pixel.</p>
+        <p>The touch surface drives the cursor in relative trackpad mode, with non-linear acceleration curve and sub-pixel accumulation.</p>
       </div>
       <div class="feature">
-        <h4>Scroll 2 doigts</h4>
-        <p>Centroïde lissé, sub-pixel accumulator, sensibilité ajustable de 0.05 à 2.0&nbsp;px par unité tablette. Inversion "naturel / classique".</p>
+        <h4>2-finger scroll</h4>
+        <p>Smoothed centroid, sub-pixel accumulator, sensitivity adjustable from 0.05 to 2.0 px per tablet unit. "Natural / classic" direction toggle.</p>
       </div>
       <div class="feature">
-        <h4>Gestes 3 doigts</h4>
-        <p>Swipe vertical&nbsp;= Mission Control / Exposé. Swipe horizontal&nbsp;= switch Spaces. Tap&nbsp;= middle click.</p>
+        <h4>3-finger gestures</h4>
+        <p>Vertical swipe = Mission Control / Exposé. Horizontal swipe = switch Spaces. Tap = middle click.</p>
       </div>
       <div class="feature">
-        <h4>Coexiste avec Wacom</h4>
-        <p>Si le driver Wacom officiel est encore installé, un script désactive ses daemons sans rien supprimer&nbsp;— réversible.</p>
+        <h4>Coexists with Wacom</h4>
+        <p>If the official Wacom driver is still installed, a script disables its daemons without removing anything — fully reversible.</p>
       </div>
     </div>
   </section>
 
-  <section id="technique">
-    <h2>Présentation technique</h2>
-    <p class="sub">Pour les curieux et les gens qui voudraient porter wacomd vers d'autres modèles Wacom.</p>
+  <section id="tech">
+    <h2>Technical overview</h2>
+    <p class="sub">For the curious and for anyone willing to port wacomd to other Wacom models.</p>
 
     <div class="tech-grid">
 
       <div>
         <h3>Architecture</h3>
         <p>
-          Démon Swift en userspace utilisant <code>IOHIDManager</code> pour lire la
-          tablette (page vendor 0xff0d pour le stylet, page 0xff00 pour le tactile),
-          et <code>CGEvent</code> pour injecter clics, mouvements de curseur et
-          évènements <code>.tabletProximity</code>&nbsp;/&nbsp;<code>.tabletPoint</code>
-          avec pression. Aucune extension noyau, aucun entitlement Apple spécifique
-          — toutes les capabilities sensibles sont gérées par TCC au runtime.
+          Swift userspace daemon using <code>IOHIDManager</code> to read the
+          tablet (vendor page 0xff0d for the pen, page 0xff00 for touch),
+          and <code>CGEvent</code> to inject clicks, cursor moves and
+          <code>.tabletProximity</code>&nbsp;/&nbsp;<code>.tabletPoint</code>
+          events carrying pressure. No kernel extension, no special Apple
+          entitlement — every sensitive capability is gated by TCC at runtime.
         </p>
       </div>
 
       <div>
-        <h3>Protocole stylet</h3>
+        <h3>Pen protocol</h3>
         <p>
-          Reverse-engineering du format Intuos5/Pro depuis le driver Linux
-          (<code>drivers/hid/wacom_wac.c</code>). Rapport 10 octets, Report ID 2&nbsp;:
+          Intuos5/Pro format reverse-engineered from the Linux driver
+          (<code>drivers/hid/wacom_wac.c</code>). 10-byte report, Report ID 2:
         </p>
         <ul>
           <li><code>X = (b[2]&lt;&lt;9) | (b[3]&lt;&lt;1) | (b[9]&gt;&gt;1)&amp;1</code></li>
           <li><code>Y = (b[4]&lt;&lt;9) | (b[5]&lt;&lt;1) | b[9]&amp;1</code></li>
-          <li>Pression 11 bits sur <code>b[6..7]</code> + LSB dans le status byte</li>
-          <li>Proximité enter/leave sur Report ID 0xc0</li>
+          <li>11-bit pressure in <code>b[6..7]</code> + LSB inside the status byte</li>
+          <li>Proximity enter/leave on Report ID 0xc0</li>
         </ul>
       </div>
 
       <div>
-        <h3>Protocole tactile</h3>
+        <h3>Touch protocol</h3>
         <p>
-          Surface multi-touch en 12-bit packé asymétrique&nbsp;: chaque slot (5 max)
-          occupe 8 octets, l'octet de poids fort donne X ou Y, le nibble haut d'un
-          octet voisin complète les 4 bits restants. Le firmware n'expose pas
-          les ExpressKeys ni le Touch Ring via HID — ils restent inaccessibles
-          sans accès USB direct (IOUSBLib).
+          Multi-touch surface in 12-bit asymmetric packed format: each slot
+          (up to 5) takes 8 bytes, the high-order byte holds X or Y, the
+          high nibble of a neighbouring byte completes the remaining 4 bits.
+          The firmware does not expose the ExpressKeys nor the Touch Ring
+          over HID — they remain unreachable without direct USB access
+          (IOUSBLib).
         </p>
       </div>
 
       <div>
         <h3>Configuration</h3>
         <p>
-          Fichier JSON dans <code>~/Library/Application Support/wacomd/config.json</code>.
-          Le démon le recharge à la volée sur réception de <code>SIGHUP</code>,
-          envoyé automatiquement par l'app de paramétrage à chaque modification.
-          Pas besoin de redémarrer le service.
+          JSON file at <code>~/Library/Application Support/wacomd/config.json</code>.
+          The daemon hot-reloads it on receipt of <code>SIGHUP</code>, sent
+          automatically by the configurator app on every change.
+          No service restart needed.
         </p>
       </div>
 
@@ -422,47 +416,47 @@
   </section>
 
   <section>
-    <h2>Compatibilité</h2>
+    <h2>Compatibility</h2>
     <div class="tech-grid">
       <div>
-        <h3>Système</h3>
+        <h3>System</h3>
         <ul>
-          <li>macOS&nbsp;26 Tahoe — testé</li>
-          <li>macOS&nbsp;15 Sequoia — devrait fonctionner (API publiques inchangées)</li>
-          <li>macOS&nbsp;14 Sonoma — idem</li>
+          <li>macOS&nbsp;26 Tahoe — tested</li>
+          <li>macOS&nbsp;15 Sequoia — should work (public APIs unchanged)</li>
+          <li>macOS&nbsp;14 Sonoma — same</li>
           <li>Apple Silicon&nbsp;+ Intel</li>
         </ul>
       </div>
       <div>
-        <h3>Tablettes</h3>
+        <h3>Tablets</h3>
         <ul>
-          <li>Wacom Intuos Pro Small — PTH-451 (VID 0x056a / PID 0x0314) ✓ testé</li>
-          <li>Famille Intuos5&nbsp;/&nbsp;Pro — non testé mais format de rapport identique sous Linux, ajout 1-ligne dans <code>KnownModels.swift</code></li>
-          <li>Modèles Bluetooth — non supporté pour l'instant</li>
+          <li>Wacom Intuos Pro Small — PTH-451 (VID 0x056a / PID 0x0314) ✓ tested</li>
+          <li>Intuos5&nbsp;/&nbsp;Pro family — untested but identical report format under Linux, one-line addition to <code>KnownModels.swift</code></li>
+          <li>Bluetooth models — not supported yet</li>
         </ul>
       </div>
     </div>
   </section>
 
-  <section id="acheter">
-    <h2>Acheter Wacomd Config</h2>
+  <section id="buy">
+    <h2>Buy Wacomd Config</h2>
     <p class="sub">
-      Une licence personnelle, paiement unique, valable sur tous tes Macs.
-      Le driver lui-même reste gratuit et open-source — pas besoin d'acheter
-      l'app pour faire fonctionner ta tablette.
+      A personal licence, one-time payment, valid on all your Macs.
+      The driver itself stays free and open-source — you don't need to buy
+      the app to make your tablet work.
     </p>
     <div class="price-card featured" style="max-width: 480px;">
-      <div class="label">Wacomd Config — 4,99&nbsp;€</div>
+      <div class="label">Wacomd Config — €4.99</div>
       <p style="color: var(--muted); font-size: 14.5px; margin-top: 6px;">
-        Achat sécurisé via Stripe.
-        Téléchargement immédiat de la build signée et notarisée.
+        Secure checkout via Stripe.
+        Instant download of the signed and notarised build.
       </p>
-      <a class="btn btn-primary" style="margin-top: 20px;" href="https://buy.stripe.com/PLACEHOLDER_LINK">Acheter — 4,99&nbsp;€</a>
+      <a class="btn btn-primary" style="margin-top: 20px;" href="https://buy.stripe.com/PLACEHOLDER_LINK">Buy — €4.99</a>
     </div>
   </section>
 
   <footer>
-    <p>wacomd — driver libre Wacom pour macOS · MIT · 2026</p>
+    <p>wacomd — open-source Wacom driver for macOS · MIT · 2026</p>
     <p>
       <a href="https://github.com/yanickb/wacomd">GitHub</a> ·
       <a href="https://app.thinkspark.eu/">thinkspark.eu</a> ·
