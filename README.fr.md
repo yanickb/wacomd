@@ -1,13 +1,36 @@
-# wacomd — pilote Wacom PTH-451 pour macOS Tahoe (26)
+<p align="center">
+  <img src="assets/icon.png" alt="wacomd ghost mascot" width="200"/>
+</p>
 
-Démon en espace utilisateur, écrit en Swift, qui fait fonctionner une **Wacom
-Intuos Pro Small (PTH-451)** sur macOS 26 (Tahoe) sans le pilote officiel
-Wacom — qui ne supporte plus ce modèle.
+<h1 align="center">wacomd</h1>
 
-Aucun kernel-extension, aucun DriverKit. Tout passe par `IOHIDManager` côté
-lecture et `CGEvent` côté injection : c'est l'approche utilisée par
-OpenTabletDriver, Hawku et la plupart des pilotes tablette open-source modernes
-sur macOS.
+<p align="center">
+  <strong>Pilote open-source pour Wacom Intuos Pro Small (PTH-451) sur macOS 26 Tahoe.</strong>
+  <br/>
+  Stylet · pression 2048 niveaux · gomme · tilt · tactile multi-doigts (1/2/3 doigts)
+  <br/>
+  <em>Aucune extension noyau. Aucun DriverKit. Aucun driver Wacom officiel requis.</em>
+</p>
+
+<p align="center">
+  <a href="https://app.thinkspark.eu/wacom_PTH-405_Driver/"><img src="https://img.shields.io/badge/landing-app.thinkspark.eu-4ea0ff?style=flat-square" alt="Landing"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/licence-MIT-59d28e?style=flat-square" alt="MIT"/></a>
+  <a href="#"><img src="https://img.shields.io/badge/macOS-26%20Tahoe-93a3c2?style=flat-square" alt="macOS 26"/></a>
+  <a href="#"><img src="https://img.shields.io/badge/Apple-Notarisé-93a3c2?style=flat-square" alt="Notarisé"/></a>
+</p>
+
+---
+
+Wacom n'écrit plus de pilote supporté pour la PTH-451 sur macOS récent.
+**wacomd** est un démon Swift en espace utilisateur qui la ramène à la vie :
+`IOHIDManager` lit les rapports HID bruts, un parseur porté du noyau Linux
+décode le protocole vendor Wacom, et `CGEvent` injecte mouvements stylet /
+clics / pression / évènements tactiles dans le pipeline du système. Même
+approche qu'[OpenTabletDriver](https://github.com/OpenTabletDriver/OpenTabletDriver)
+ou [Hawku](https://github.com/poiuyt9876/hawku-userspace).
+
+> 🌐 Page de présentation : [app.thinkspark.eu/wacom_PTH-405_Driver/](https://app.thinkspark.eu/wacom_PTH-405_Driver/).
+> 🇬🇧 English README : [README.md](README.md).
 
 ## État actuel — v0.2.0 (testé live sur macOS 26.3 Apple Silicon)
 

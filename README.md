@@ -1,17 +1,37 @@
-# wacomd — Wacom Intuos Pro Small (PTH-451) driver for macOS 26 Tahoe
+<p align="center">
+  <img src="assets/icon.png" alt="wacomd ghost mascot" width="200"/>
+</p>
 
-A small Swift userspace daemon that brings the **Wacom Intuos Pro Small
-(PTH-451)** back to life on **macOS 26 Tahoe**, where Wacom's official driver
-no longer ships a supported version for this model.
+<h1 align="center">wacomd</h1>
 
-No kernel extension, no DriverKit, no entitlements from Apple. The whole thing
-sits in userspace: `IOHIDManager` reads raw HID reports, a parser ported from
-the Linux kernel decodes the Wacom vendor protocol, and `CGEvent` injects pen
-moves / clicks / pressure into the event tap. Same approach as
+<p align="center">
+  <strong>Open-source Wacom Intuos Pro Small (PTH-451) driver for macOS 26 Tahoe.</strong>
+  <br/>
+  Pen · 2048-level pressure · eraser · tilt · multi-touch (1/2/3 fingers)
+  <br/>
+  <em>No kernel extension. No DriverKit. No Wacom official driver needed.</em>
+</p>
+
+<p align="center">
+  <a href="https://app.thinkspark.eu/wacom_PTH-405_Driver/"><img src="https://img.shields.io/badge/landing-app.thinkspark.eu-4ea0ff?style=flat-square" alt="Landing page"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/licence-MIT-59d28e?style=flat-square" alt="MIT"/></a>
+  <a href="#"><img src="https://img.shields.io/badge/macOS-26%20Tahoe-93a3c2?style=flat-square" alt="macOS 26"/></a>
+  <a href="#"><img src="https://img.shields.io/badge/Apple-Notarised-93a3c2?style=flat-square" alt="Notarised"/></a>
+  <a href="https://github.com/yanickb/wacomd/stargazers"><img src="https://img.shields.io/github/stars/yanickb/wacomd?style=flat-square&color=ffc444" alt="GitHub stars"/></a>
+</p>
+
+---
+
+Wacom no longer ships a supported driver for the PTH-451 on recent macOS
+releases. **wacomd** is a small Swift userspace daemon that brings it back :
+`IOHIDManager` reads raw HID reports, a parser ported from the Linux kernel
+decodes the Wacom vendor protocol, and `CGEvent` injects pen moves / clicks /
+pressure / touch events into the system event tap. Same approach as
 [OpenTabletDriver](https://github.com/OpenTabletDriver/OpenTabletDriver) and
 [Hawku](https://github.com/poiuyt9876/hawku-userspace).
 
-🇫🇷 Une version française du README est disponible : [README.fr.md](README.fr.md).
+> 🇫🇷 Une version française du README est disponible : [README.fr.md](README.fr.md).
+> 🌐 Landing page : [app.thinkspark.eu/wacom_PTH-405_Driver/](https://app.thinkspark.eu/wacom_PTH-405_Driver/).
 
 ## ⚠️ Scope — what this driver does NOT do
 
