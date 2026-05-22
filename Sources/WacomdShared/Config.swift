@@ -5,6 +5,10 @@ import Foundation
 /// reloaded on SIGHUP so the user can iterate without restarting the daemon.
 public struct WacomdConfig: Codable, Equatable {
     // ---- Touch enable toggles ---------------------------------------------
+    /// Master switch — when false, the whole multi-touch surface is
+    /// ignored regardless of the per-gesture toggles below.
+    public var touchEnabled: Bool = true
+
     public var oneFingerCursor:   Bool = true
     public var twoFingerScroll:   Bool = true
     public var threeFingerSwipes: Bool = true
@@ -37,6 +41,7 @@ public struct WacomdConfig: Codable, Equatable {
     /// Custom decoder so adding new fields doesn't reject existing config
     /// files — missing keys fall back to the default value of that field.
     private enum CodingKeys: String, CodingKey {
+        case touchEnabled
         case oneFingerCursor, twoFingerScroll, threeFingerSwipes, tapToClick
         case naturalScroll
         case cursorSensitivity, scrollSensitivity, threeFingerSwipeThreshold
@@ -46,6 +51,7 @@ public struct WacomdConfig: Codable, Equatable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = WacomdConfig()  // baseline of defaults
+        self.touchEnabled      = try c.decodeIfPresent(Bool.self,   forKey: .touchEnabled)      ?? d.touchEnabled
         self.oneFingerCursor   = try c.decodeIfPresent(Bool.self,   forKey: .oneFingerCursor)   ?? d.oneFingerCursor
         self.twoFingerScroll   = try c.decodeIfPresent(Bool.self,   forKey: .twoFingerScroll)   ?? d.twoFingerScroll
         self.threeFingerSwipes = try c.decodeIfPresent(Bool.self,   forKey: .threeFingerSwipes) ?? d.threeFingerSwipes

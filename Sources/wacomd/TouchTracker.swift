@@ -84,6 +84,22 @@ final class TouchTracker {
     // MARK: - Frame handler
 
     func handleFrame(contacts: [TouchContact]) {
+        // Master switch — when touch is disabled in the config we drop the
+        // frame entirely AND flush all per-touch state so that re-enabling
+        // it later doesn't replay a stale gesture.
+        if !ConfigStore.shared.current.touchEnabled {
+            if !touches.isEmpty || scrollSmoothedCentroid != nil
+               || cursorAccumDx != 0 || cursorAccumDy != 0 {
+                touches.removeAll()
+                scrollSmoothedCentroid = nil
+                cursorAccumDx = 0; cursorAccumDy = 0
+                scrollAccumDx = 0; scrollAccumDy = 0
+                threeFingerStart = nil
+                threeFingerSwipeFired = false
+            }
+            return
+        }
+
         let now = CFAbsoluteTimeGetCurrent()
 
         let activeIDs = Set(contacts.filter { $0.inContact }.map { $0.slotID })

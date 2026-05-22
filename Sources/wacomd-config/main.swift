@@ -66,13 +66,30 @@ struct ConfigView: View {
         VStack(alignment: .leading, spacing: 12) {
             header
             Divider()
+            masterToggle
+            Divider()
             togglesSection
+                .disabled(!model.config.touchEnabled)
+                .opacity(model.config.touchEnabled ? 1.0 : 0.45)
             Divider()
             slidersSection
+                .disabled(!model.config.touchEnabled)
+                .opacity(model.config.touchEnabled ? 1.0 : 0.45)
             Divider()
             footer
         }
         .padding(14)
+    }
+
+    private var masterToggle: some View {
+        Toggle(isOn: $model.config.touchEnabled) {
+            HStack(spacing: 6) {
+                Image(systemName: "hand.tap.fill")
+                Text("Tactile").font(.headline)
+            }
+        }
+        .toggleStyle(.switch)
+        .help("Active ou désactive entièrement la surface tactile (1, 2 et 3 doigts).")
     }
 
     private var header: some View {
