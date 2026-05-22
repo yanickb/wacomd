@@ -10,10 +10,8 @@ struct TouchContact: Equatable {
     let y: Int
 }
 
-/// Logical max of the 16-bit big-endian touch coordinates.
-/// Empirically observed values cover roughly 0..0xC000 on a PTH-451,
-/// but we normalise against the full 16-bit range for safety.
-let maxTouchAxis: Int = 65535
+/// Logical max of the 12-bit touch coordinates on a PTH-451.
+let maxTouchAxis: Int = 4095
 
 /// Decoder for the multi-touch reports of the Wacom Intuos Pro family.
 ///
@@ -83,13 +81,24 @@ enum IntuosProTouchParser {
             let validSlotID = (slotID >= 0x02 && slotID < 0x20)
             if !validSlotID || pressureByte == 0 { continue }
 
-            // The user reported that with X = (b[+1] << 8) | b[+2] the
-            // cursor's X axis was stuck on the center vertical line while
-            // Y tracked finger motion correctly. That suggests bytes +1
-            // and +2 don't carry the X coordinate. Try swapping : use
-            // bytes +3, +4 for X and +1, +2 for Y.
-            let x = (Int(data[off + 3]) << 8) | Int(data[off + 4])
-            let y = (Int(data[off + 1]) << 8) | Int(data[off + 2])
+            // Real format observed in a verbose capture of a user horizontal
+            // swipe : 12-bit X and Y, asymmetric packing where the low
+            // nibble of the high byte of each axis lives in a SEPARATE
+            // companion byte.
+            //
+            //   X = (b[+2] << 4) | (b[+1] >> 4)      // max ≈ 4095
+            //   Y = (b[+3] << 4) | (b[+4] >> 4)
+            //
+            // The middle byte holds the high 8 bits of position, the
+            // adjacent byte holds 4 bits of refinement in its high nibble.
+            // (b[+1] and b[+4] also have a low nibble that's pure noise /
+            // status — we discard it.)
+            let b1 = Int(data[off + 1])
+            let b2 = Int(data[off + 2])
+            let b3 = Int(data[off + 3])
+            let b4 = Int(data[off + 4])
+            let x = (b2 << 4) | (b1 >> 4)
+            let y = (b3 << 4) | (b4 >> 4)
 
             if Verbose.enabled {
                 let raw = (0..<8).map { String(format: "%02x", data[off + $0]) }.joined(separator: " ")
