@@ -37,6 +37,38 @@ mkdir -p "$APP_DIR/Contents/Resources"
 cp "$BIN" "$APP_DIR/Contents/MacOS/wacomd-config"
 chmod +x "$APP_DIR/Contents/MacOS/wacomd-config"
 
+# ---- Icon (.icns) ----------------------------------------------------------
+ICON_SRC="$REPO_DIR/assets/icon.png"
+if [ -f "$ICON_SRC" ]; then
+    echo "==> Bake .icns from assets/icon.png"
+    ICONSET="$OUT_DIR/AppIcon.iconset"
+    rm -rf "$ICONSET"
+    mkdir -p "$ICONSET"
+    # Standard macOS app icon sizes (Apple wants every variant).
+    for spec in \
+        "16:icon_16x16.png" \
+        "32:icon_16x16@2x.png" \
+        "32:icon_32x32.png" \
+        "64:icon_32x32@2x.png" \
+        "128:icon_128x128.png" \
+        "256:icon_128x128@2x.png" \
+        "256:icon_256x256.png" \
+        "512:icon_256x256@2x.png" \
+        "512:icon_512x512.png" \
+        "1024:icon_512x512@2x.png"
+    do
+        size="${spec%%:*}"
+        name="${spec##*:}"
+        sips -z "$size" "$size" "$ICON_SRC" --out "$ICONSET/$name" >/dev/null 2>&1
+    done
+    iconutil --convert icns "$ICONSET" --output "$APP_DIR/Contents/Resources/AppIcon.icns"
+    rm -rf "$ICONSET"
+    ICON_KEY="    <key>CFBundleIconFile</key>            <string>AppIcon</string>"
+else
+    echo "(no assets/icon.png — bundle will use the generic icon)"
+    ICON_KEY=""
+fi
+
 cat > "$APP_DIR/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -49,7 +81,8 @@ cat > "$APP_DIR/Contents/Info.plist" <<EOF
     <key>CFBundleName</key>                  <string>${APP_NAME}</string>
     <key>CFBundleDisplayName</key>           <string>${APP_NAME}</string>
     <key>CFBundlePackageType</key>           <string>APPL</string>
-    <key>CFBundleShortVersionString</key>    <string>0.8.2</string>
+${ICON_KEY}
+    <key>CFBundleShortVersionString</key>    <string>0.8.4</string>
     <key>CFBundleVersion</key>               <string>1</string>
     <key>LSMinimumSystemVersion</key>        <string>13.0</string>
     <!-- Menu-bar agent : no Dock icon, no main window. -->
