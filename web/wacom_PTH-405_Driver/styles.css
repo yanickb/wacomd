@@ -427,6 +427,11 @@ section .sub {
   grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
+.tip-options.single {
+  display: flex;
+  justify-content: center;
+}
+.tip-options.single .tip-btn { min-width: 240px; }
 @media (max-width: 540px) { .tip-options { grid-template-columns: 1fr; } }
 
 .tip-btn {
