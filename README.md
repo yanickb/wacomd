@@ -15,15 +15,17 @@ moves / clicks / pressure into the event tap. Same approach as
 
 ## ⚠️ Scope — what this driver does NOT do
 
-The following are **not implemented yet** :
+The following are **not supported and won't be in the v0.x line** :
 
 - ❌ The 6 **ExpressKeys** (the pad buttons on the side of the tablet)
 - ❌ The **Touch Ring** (the wheel)
 - ❌ Multi-touch gestures beyond **2-finger scroll** (pinch / rotate / 3-finger
   swipe require private SPI and are out of scope)
 
-If your workflow depends on any of those, this driver is not enough for you
-yet. They're all on the roadmap — see [Roadmap](#roadmap).
+The pad (ExpressKeys + Touch Ring) is a structural blocker, not a missing
+feature — see [Known limitation : the pad](#known-limitation--the-pad-expresskeys--touch-ring)
+below. If your workflow depends on the ExpressKeys, this driver is not for
+you, full stop.
 
 ## 🛑 If you have the official Wacom driver installed: disable it first
 
@@ -241,14 +243,32 @@ Adding them is just a matter of registering the new VID/PID in
 
 ## Roadmap
 
-- ExpressKeys + Touch Ring (Report ID 12 on the pad interface — same vendor
-  page, different layout, parser ported from `wacom_intuos_pad` in Linux)
-- Multi-touch surface (Report ID 13)
 - Per-application profiles via `NSWorkspace.frontmostApplication`
 - TOML / YAML config for screen mapping & active area
-- Real tablet proximity events (`.tabletProximity`) so apps show the pen
-  indicator
+- Multi-monitor configurable mapping
 - Bluetooth variants (PTH-451 has a wireless kit)
+- Configuration UI (menu bar)
+
+## Known limitation : the pad (ExpressKeys + Touch Ring)
+
+macOS only enumerates **three HID interfaces** for the PTH-451 :
+`page=0xff0d` (pen), `page=0xff00` (touch surface + status), and
+`page=0x01 usage=0x02` (mouse fallback). There is **no fourth HID
+interface for the pad**.
+
+The pad's 6 ExpressKeys and Touch Ring communicate with their host driver
+through a vendor-specific USB endpoint that the kernel HID family doesn't
+expose to userspace. The official Wacom driver speaks to that endpoint
+directly via custom kernel code; without it (and without re-implementing
+that custom path), the pad data is simply not reachable from a HID-based
+userspace daemon.
+
+Supporting the pad would require dropping IOHIDManager for the pad
+interface and switching to `IOUSBLib` for direct USB control / bulk
+transfers, plus reverse-engineering the per-firmware polling format.
+That's ~2-3 days of focused R&D and the format isn't documented in the
+Linux Wacom driver either — the kernel handles each Wacom family with
+ad-hoc code. PRs welcome but it's a real project, not a small patch.
 
 ## Contributing
 

@@ -89,26 +89,21 @@ final class WacomDevice {
     ///
     /// We try a few known incantations and log which one (if any) succeeds.
     private func enableWacomVendorMode() {
-        // Variants observed across Wacom families. Each tuple is
-        // (reportID, payload). We try them in order; once one succeeds the
-        // others are harmless retries.
-        let variants: [(reportID: CFIndex, payload: [UInt8])] = [
-            (0x02, [0x02]),         // mode = digitizer + touch
-            (0x02, [0x02, 0x02]),   // some firmwares expect both bytes
-            (0x03, [0x04]),         // Intuos Pro 2/Pro family fallback
-            (0x0D, [0x01]),         // touch-only enable
-        ]
-
-        for v in variants {
-            let r = v.payload.withUnsafeBufferPointer { buf -> IOReturn in
-                IOHIDDeviceSetReport(device,
-                                     kIOHIDReportTypeFeature,
-                                     v.reportID,
-                                     buf.baseAddress!,
-                                     buf.count)
-            }
-            let hex = String(format: "0x%08x", r)
-            Verbose.log("SetReport Feature id=\(v.reportID) payload=\(v.payload.map { String(format: "%02x", $0) }.joined()) → \(hex)")
+        // The single SetReport that empirically enables digitizer + touch
+        // on the PTH-451. We deliberately don't probe other variants
+        // because some of them (e.g. id=0x02 payload=[02 82], id=0x04
+        // payload=[04 02]) make the device reply with kIOReturnNotPrivileged
+        // and then stop emitting reports entirely for ~30 seconds.
+        let payload: [UInt8] = [0x02, 0x02]
+        let r = payload.withUnsafeBufferPointer { buf -> IOReturn in
+            IOHIDDeviceSetReport(device, kIOHIDReportTypeFeature, 0x02,
+                                 buf.baseAddress!, buf.count)
+        }
+        let hex = String(format: "0x%08x", r)
+        if r == kIOReturnSuccess {
+            Verbose.log("✓ SetReport Feature id=0x02 payload=[02 02] (Wacom vendor mode)")
+        } else {
+            Verbose.log("  SetReport Feature id=0x02 payload=[02 02] → \(hex)")
         }
     }
 
