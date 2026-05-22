@@ -21,6 +21,10 @@ final class WacomDevice {
     private let interfaceLabel: String
     private let isPenInterface: Bool
     private let isTouchInterface: Bool
+    /// Dedup state for proximity-enter packets, which the firmware emits
+    /// periodically even when no tool transition happens.
+    private var lastSeenToolID: UInt32 = 0
+    private var lastSeenSerial: UInt64 = 0
 
     var modelName: String { model.name }
 
@@ -166,12 +170,29 @@ final class WacomDevice {
             state.eraser = false
             injector.update(state: state, model: model)
         case .proximityEnter(let toolID, let serial):
+            // Dedup : la PTH-451 émet périodiquement des paquets de
+            // proximité même quand aucune transition n'a lieu. On
+            // n'agit que si le couple (toolID, serial) a changé.
+            let isNewTool = (toolID != lastSeenToolID) || (serial != lastSeenSerial)
+            lastSeenToolID = toolID
+            lastSeenSerial = serial
+
+            // Linux `wacom_intuos_get_tool_type` : les outils gomme
+            // ont le bit `0x008` du low byte mis, et leur low nibble
+            // est `a` ou `b` (0x80a, 0x82a, 0x84a, 0x80c, 0x82b…).
+            // Les outils stylet (tip) ont le low nibble à 2 ou 3
+            // (0x802, 0x812, 0x822, 0x823…).
+            let lowNibble = toolID & 0x00f
+            let isEraser = (lowNibble == 0xa) || (lowNibble == 0xb) || (lowNibble == 0xc)
+
             state.inRange = true
-            // Le toolID de la gomme commence par 0x0e (Linux : wacom_intuos_get_tool_type).
-            // Pour le Grip Pen standard livré avec la PTH-451 (LP-180), tool ≈ 0x802.
-            state.eraser = ((toolID & 0x0fff) == 0x82a)
-            injector.updateToolIdentity(toolID: toolID, serial: serial, isEraser: state.eraser)
-            Verbose.log(String(format: "proximité ON, toolID=0x%05x serial=0x%llx", toolID, serial))
+            state.eraser = isEraser
+            injector.updateToolIdentity(toolID: toolID, serial: serial, isEraser: isEraser)
+
+            if isNewTool {
+                Verbose.log(String(format: "proximité ON, toolID=0x%05x serial=0x%llx (eraser=%@)",
+                                   toolID, serial, isEraser ? "OUI" : "non"))
+            }
         case .pen(let sample):
             state.x = Double(sample.x)
             state.y = Double(sample.y)

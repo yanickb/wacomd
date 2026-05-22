@@ -77,10 +77,19 @@ final class EventInjector {
         }
 
         // ---- Proximity ENTER ---------------------------------------------
+        let desiredPointerType: TabletPointerType = state.eraser ? .eraser : .pen
         if !lastInRange {
-            currentPointerType = state.eraser ? .eraser : .pen
+            currentPointerType = desiredPointerType
             postProximityEvent(entering: true, model: model)
             lastInRange = true
+        } else if desiredPointerType != currentPointerType {
+            // Le stylet a été retourné en proximité : on cycle
+            // proximityLeave + proximityEnter pour que les apps
+            // (Photoshop, Procreate…) basculent leur outil entre
+            // crayon et gomme correctement.
+            postProximityEvent(entering: false, model: model)
+            currentPointerType = desiredPointerType
+            postProximityEvent(entering: true, model: model)
         }
 
         let cgPoint = mapToScreen(state: state, model: model)

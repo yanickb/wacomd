@@ -38,21 +38,59 @@ enum IntuosProParser {
     /// Tente de décoder un rapport. Retourne `.ignored` si le rapport ne nous
     /// concerne pas (rapport pad, statut batterie, etc.).
     static func decode(reportID: UInt32, data: UnsafeMutablePointer<UInt8>, length: Int) -> Result {
+        // ---- Cas 1 : proximité Report ID 192 (0xc0) ----------------------
+        //
+        // Sur le firmware de la PTH-451, l'entrée et la sortie de proximité
+        // arrivent SUR LEUR PROPRE Report ID (0xc0), pas multiplexées dans
+        // Report ID 2 comme dans le pilote Linux. Le payload est :
+        //
+        //   buf[0] = 0xc0 (Report ID echoé)
+        //   buf[1..9] = données outil
+        //
+        // On applique la formule Linux `wacom_intuos_inout` en décalant
+        // les indices d'une position (puisque macOS reproduit le Report ID
+        // au début du payload).
+        if reportID == 192, length >= 10 {
+            let d = data
+
+            // Linux : data[2..3] et data[7..8] composent l'ID outil ;
+            //         data[3..7] composent le numéro de série.
+            // Avec notre décalage : on prend buf[1..2] et buf[6..7] pour l'ID,
+            // buf[2..6] pour le serial.
+            let toolID: UInt32 =
+                (UInt32(d[1]) << 4) |
+                (UInt32(d[2]) >> 4) |
+                (UInt32(d[6] & 0x0f) << 16) |
+                (UInt32(d[7] & 0xf0) << 8)
+
+            let serial: UInt64 =
+                (UInt64(d[2] & 0x0f) << 28) |
+                (UInt64(d[3]) << 20) |
+                (UInt64(d[4]) << 12) |
+                (UInt64(d[5]) << 4)  |
+                (UInt64(d[6]) >> 4)
+
+            // Si tous les octets significatifs sont à zéro / fixes, c'est
+            // probablement un heartbeat "session" et pas une vraie transition.
+            // On signale quand même l'entrée — `WacomDevice` fait son propre
+            // dedup en mémorisant le dernier toolID.
+            return .proximityEnter(toolID: toolID, serial: serial)
+        }
+
         // Le rapport pen est l'ID 0x02 et fait 10 octets.
         guard reportID == 2, length >= 10 else { return .ignored }
 
         let d = data
         let status = d[1]
 
-        // ---- Détection proximité enter/leave -----------------------------
+        // ---- Détection proximité enter/leave (firmware "classique") -----
         //
-        // Linux : `(data[1] & 0xfc) == 0xc0` → entrée en proximité.
-        // Linux : `(data[1] & 0xfe) == 0x80` → sortie de proximité.
+        // Conservé au cas où certains firmware variants utiliseraient
+        // toujours le multiplexage Linux.
         if (status & 0xfe) == 0x80 {
             return .proximityLeave
         }
         if (status & 0xfc) == 0xc0 {
-            // Rapport "tool ID" — donne le numéro de série du stylet.
             let toolID: UInt32 =
                 (UInt32(d[2]) << 4) |
                 (UInt32(d[3]) >> 4) |
