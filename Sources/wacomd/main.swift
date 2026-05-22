@@ -1,12 +1,17 @@
 import Foundation
+import WacomdShared
 
 setbuf(stdout, nil)
 
 print("""
-[wacomd] Démon de pilote Wacom pour macOS — version 0.4.0
+[wacomd] Démon de pilote Wacom pour macOS — version 0.7.0
 [wacomd] Modèle supporté actuellement: Intuos Pro Small (PTH-451)
-[wacomd] Fonctionnalités: stylet + pression + tap/1-doigt/2-doigts touch
+[wacomd] Stylet + pression + 1/2/3-doigts. Config: \(WacomdConfig.defaultPath.path)
 """)
+
+// Charge la config dès maintenant (crée le fichier avec les défauts au 1er
+// lancement). Le reload à chaud est géré via SIGHUP plus bas.
+_ = ConfigStore.shared.current
 
 // 1. Permissions Accessibilité — déclenche la pop-up macOS la 1re fois.
 let axOK = Permissions.requestAccessibility(prompt: true)
@@ -51,6 +56,15 @@ for sig in signals {
     src.resume()
     sources.append(src)
 }
+
+// SIGHUP : rechargement à chaud de la config (utilisé par l'app de paramétrage).
+signal(SIGHUP, SIG_IGN)
+let hupSource = DispatchSource.makeSignalSource(signal: SIGHUP, queue: .main)
+hupSource.setEventHandler {
+    ConfigStore.shared.reload()
+}
+hupSource.resume()
+sources.append(hupSource)
 _ = sources
 
 print("[wacomd] En attente d'une tablette… (Ctrl+C pour quitter)")

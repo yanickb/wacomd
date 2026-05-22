@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import WacomdShared
 
 /// Per-finger state we maintain across HID frames. Positions are kept in
 /// raw tablet units (0..maxTouchAxis) because the multi-touch surface
@@ -32,28 +33,13 @@ final class TouchTracker {
     private var threeFingerStart: (x: Double, y: Double, time: CFAbsoluteTime)?
     private var threeFingerSwipeFired: Bool = false
 
-    /// Tap recognised if : duration < `tapMaxDuration` AND max raw-unit
-    /// displacement during the contact < `tapMaxRawMovement`.
-    private let tapMaxDuration: CFAbsoluteTime = 0.20
-    /// In raw tablet units (~4095 = full tablet). 60 units ≈ 1.5 mm — tight
-    /// enough to reject accidental drags while letting natural taps through.
-    private let tapMaxRawMovement: Double = 60
+    private var config: WacomdConfig { ConfigStore.shared.current }
+    private var tapMaxDuration: CFAbsoluteTime { CFAbsoluteTime(config.tapMaxDurationMs) / 1000 }
+    private var tapMaxRawMovement: Double { config.tapMaxRawMovement }
+    private var threeFingerSwipeThreshold: Double { config.threeFingerSwipeThreshold }
+    private var cursorSensitivity: Double { config.cursorSensitivity }
+    private var scrollSensitivity: Double { config.scrollSensitivity }
 
-    /// 3-finger swipe is triggered once any axis of centroid motion exceeds
-    /// `threeFingerSwipeThreshold` raw units. The DIRECTION of the dominant
-    /// delta determines which gesture fires.
-    private let threeFingerSwipeThreshold: Double = 200
-
-    /// Cursor sensitivity, in screen pixels per raw tablet unit.
-    /// 0.35 → a 1-inch finger swipe (~800 raw units on a PTH-451) moves the
-    /// cursor by ~280 px, roughly matching a MacBook trackpad in its
-    /// "Tracking speed = 5/10" preset.
-    private let cursorSensitivity: Double = 0.35
-
-    /// Scroll sensitivity, in scroll pixels per raw tablet unit.
-    /// Slightly above cursor sensitivity since scroll typically traverses
-    /// more screen distance per finger swipe than cursor moves.
-    private let scrollSensitivity: Double = 0.5
     private let scrollDeadZoneRaw: Double = 4
     private let scrollMaxPerEvent: Double = 120
 
@@ -108,7 +94,8 @@ final class TouchTracker {
                               && touch.maxDistanceFromStart <= tapMaxRawMovement
 
             // 1-finger tap → left click
-            if isShortContact && previousIDs.count == 1 && releaseCount == 1 {
+            if config.tapToClick
+               && isShortContact && previousIDs.count == 1 && releaseCount == 1 {
                 Verbose.log(String(format: "1-finger tap (duration=%.0fms, drift=%.0f)",
                                    duration * 1000, touch.maxDistanceFromStart))
                 injector.tapClick()
@@ -117,7 +104,8 @@ final class TouchTracker {
 
         // 3-finger TAP : all 3 fingers released together within tapMaxDuration
         // without a swipe having fired during the contact.
-        if previousIDs.count == 3 && touches.isEmpty
+        if config.threeFingerSwipes
+           && previousIDs.count == 3 && touches.isEmpty
            && !threeFingerSwipeFired
            && threeFingerStart != nil
            && (now - threeFingerStart!.time) <= tapMaxDuration {
@@ -134,15 +122,20 @@ final class TouchTracker {
         case 0:
             lastScrollCentroid = nil
         case 1:
-            // 1-finger relative cursor drive
-            if let delta = deltas.values.first {
+            if config.oneFingerCursor, let delta = deltas.values.first {
                 applyCursorDelta(dx: delta.dx, dy: delta.dy)
             }
             lastScrollCentroid = nil
         case 2:
-            handleTwoFingerScroll()
+            if config.twoFingerScroll {
+                handleTwoFingerScroll()
+            } else {
+                lastScrollCentroid = nil
+            }
         case 3:
-            handleThreeFingerSwipe(now: now)
+            if config.threeFingerSwipes {
+                handleThreeFingerSwipe(now: now)
+            }
             lastScrollCentroid = nil
         default:
             lastScrollCentroid = nil
