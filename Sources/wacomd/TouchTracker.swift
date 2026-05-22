@@ -37,11 +37,11 @@ final class TouchTracker {
     private let cursorSensitivity: Double = 0.35
 
     /// Scroll sensitivity, in scroll pixels per raw tablet unit.
-    /// Tuned independently from cursor sensitivity since scroll feel
-    /// differs.
-    private let scrollSensitivity: Double = 0.10
-    private let scrollDeadZoneRaw: Double = 6
-    private let scrollMaxPerEvent: Double = 80
+    /// Slightly above cursor sensitivity since scroll typically traverses
+    /// more screen distance per finger swipe than cursor moves.
+    private let scrollSensitivity: Double = 0.5
+    private let scrollDeadZoneRaw: Double = 4
+    private let scrollMaxPerEvent: Double = 120
 
     init(injector: EventInjector) {
         self.injector = injector
