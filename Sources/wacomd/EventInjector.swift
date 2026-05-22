@@ -238,32 +238,57 @@ final class EventInjector {
 
     // MARK: - Cursor / click from the multi-touch surface
 
-    /// Move the cursor to an absolute screen position. Used by the 1-finger
-    /// touch handler. Doesn't carry any tablet payload (apps that care
-    /// about pen-vs-touch can distinguish via NSEvent subtype).
-    func moveCursor(to point: CGPoint) {
+    /// Move the cursor relative to its current screen position by `dx`/`dy`
+    /// screen pixels. Trackpad-style behaviour : where the finger LANDS on
+    /// the tablet doesn't matter, only the delta of motion is consumed.
+    func moveCursorBy(dx: Double, dy: Double) {
+        let current = currentCursorPosition()
+        let target = CGPoint(x: current.x + dx, y: current.y + dy)
+
         guard let evt = CGEvent(
             mouseEventSource: nil,
             mouseType: .mouseMoved,
-            mouseCursorPosition: point,
+            mouseCursorPosition: target,
             mouseButton: .left
         ) else { return }
+        // Also expose the delta to apps that read it.
+        evt.setIntegerValueField(.mouseEventDeltaX, value: Int64(dx.rounded()))
+        evt.setIntegerValueField(.mouseEventDeltaY, value: Int64(dy.rounded()))
         evt.post(tap: .cghidEventTap)
     }
 
-    /// Post a quick left mouse down + up at `point` — a tap-to-click from
-    /// the multi-touch surface.
-    func tapClick(at point: CGPoint) {
+    /// Read the current cursor position. CGEvent returns coordinates in
+    /// the CG "flipped" space (top-left origin) which is what we use to
+    /// post events too.
+    private func currentCursorPosition() -> CGPoint {
+        // CGEvent(source: nil) creates a "null" event ; its `.location`
+        // is populated with the current pointer location by the OS.
+        if let probe = CGEvent(source: nil) {
+            return probe.location
+        }
+        // Fallback : convert NSEvent.mouseLocation (Cocoa, bottom-left
+        // origin) into CG coordinates by flipping Y.
+        let cocoaLoc = NSEvent.mouseLocation
+        let primaryHeight = NSScreen.screens.first?.frame.height ?? 1080
+        return CGPoint(x: cocoaLoc.x, y: primaryHeight - cocoaLoc.y)
+    }
+
+    /// Post a quick left mouse down + up at the cursor's CURRENT position.
+    /// Used by tap-to-click on the multi-touch surface (in relative mode,
+    /// we don't care where on the tablet the tap happened — only that a
+    /// tap happened).
+    func tapClick() {
+        let p = currentCursorPosition()
         guard let down = CGEvent(
             mouseEventSource: nil,
             mouseType: .leftMouseDown,
-            mouseCursorPosition: point,
+            mouseCursorPosition: p,
             mouseButton: .left
         ),
         let up = CGEvent(
             mouseEventSource: nil,
             mouseType: .leftMouseUp,
-            mouseCursorPosition: point,
+            mouseCursorPosition: p,
             mouseButton: .left
         ) else { return }
         down.setIntegerValueField(.mouseEventClickState, value: 1)
