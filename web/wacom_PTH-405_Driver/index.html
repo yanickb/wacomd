@@ -6,7 +6,7 @@
 <title>wacomd — driver libre Wacom Intuos Pro Small sur macOS Tahoe</title>
 <meta name="description" content="Pilote userspace open-source et app de paramétrage pour la Wacom Intuos Pro Small (PTH-451) sur macOS 26 Tahoe. Stylet, pression 2048 niveaux, gomme, gestes tactiles 1/2/3 doigts.">
 <meta property="og:title" content="wacomd — driver libre Wacom PTH-451 sur macOS Tahoe">
-<meta property="og:description" content="Stylet, pression, tactile multi-doigts. Driver gratuit, app de réglages payante.">
+<meta property="og:description" content="Stylet, pression, tactile multi-doigts. Entièrement gratuit et open-source. Paie ce que tu veux si ça t'aide.">
 <meta property="og:image" content="ghost.png">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#050a18">
@@ -60,19 +60,19 @@
   </section>
 
   <section id="telecharger">
-    <h2 class="reveal">Driver gratuit, app de paramétrage payante</h2>
+    <h2 class="reveal">Tout est gratuit, librement.</h2>
     <p class="sub reveal">
-      Le driver est et restera libre et gratuit. L'app de réglages
-      ajoute une interface de configuration en barre de menus
-      avec sliders, toggles et reload à chaud.
+      Driver, app de paramétrage, code source — tout est libre, sous
+      licence MIT. Aucune barrière, aucune licence à activer. Si le
+      projet t'aide, tu peux m'offrir un café plus bas.
     </p>
 
-    <div class="pricing">
+    <div class="pricing" style="grid-template-columns: 1fr 1fr;">
 
       <div class="price-card reveal">
-        <div class="label">Open Source</div>
-        <h3>Driver wacomd</h3>
-        <div class="price">Gratuit <small>· MIT</small></div>
+        <div class="label">Driver</div>
+        <h3>Démon wacomd</h3>
+        <div class="price">Gratuit <small>· open source · MIT</small></div>
         <ul>
           <li>Stylet absolu + clic + clic droit</li>
           <li>Pression 2048 niveaux (Photoshop, Procreate, Krita, Affinity, Clip Studio)</li>
@@ -82,16 +82,16 @@
           <li>Tap to click</li>
           <li>Démon LaunchAgent avec reload SIGHUP</li>
         </ul>
-        <a class="btn btn-ghost" href="wacomd-latest.pkg" download>Télécharger&nbsp;.pkg</a>
+        <a class="btn btn-primary" href="wacomd-latest.pkg" download>Télécharger&nbsp;.pkg</a>
       </div>
 
       <div class="price-card featured reveal">
-        <div class="badge">Pro</div>
-        <div class="label">App native macOS</div>
+        <div class="badge">App</div>
+        <div class="label">Interface native macOS</div>
         <h3>Wacomd&nbsp;Config</h3>
-        <div class="price">4,99&nbsp;€ <small>· paiement unique</small></div>
+        <div class="price">Gratuit <small>· incluse dans le&nbsp;.pkg</small></div>
         <ul>
-          <li>Barre de menus SwiftUI native (LSUIElement)</li>
+          <li>Fenêtre native + barre de menus</li>
           <li>Sliders sensibilités curseur / scroll / 3 doigts / tap</li>
           <li>Toggles 1 / 2 / 3 doigts + tap to click + scroll naturel</li>
           <li>Master switch tactile (utile en dessin)</li>
@@ -99,7 +99,7 @@
           <li>Reload à chaud du démon (pas de logout)</li>
           <li>Signée Developer ID + notarisée</li>
         </ul>
-        <a class="btn btn-primary" href="#acheter">Acheter</a>
+        <a class="btn btn-ghost" href="wacomd-latest.pkg" download>Même téléchargement</a>
       </div>
 
     </div>
@@ -211,63 +211,42 @@
     </div>
   </section>
 
-  <section id="acheter">
-    <h2 class="reveal">Acheter Wacomd Config</h2>
+  <section id="soutenir">
+    <h2 class="reveal">Si le projet t'a aidé…</h2>
     <p class="sub reveal">
-      Une licence personnelle, paiement unique, valable sur tous tes Macs.
-      Le driver lui-même reste gratuit et open-source — pas besoin d'acheter
-      l'app pour faire fonctionner ta tablette.
+      Le driver et l'app sont entièrement gratuits et open-source. Si tu veux
+      soutenir le développement, paie ce que tu veux — un café, un repas, ou
+      juste une étoile sur GitHub.
     </p>
 
-    <div class="buy-block reveal">
-      <div class="label">Wacomd Config</div>
-      <div class="price-line">
-        <span class="amount">4,99&nbsp;€</span>
-        <span class="terms">paiement unique · sans abonnement</span>
-      </div>
-      <p class="micro">
-        Téléchargement immédiat de la build signée Developer ID et notarisée
-        Apple. Licence personnelle valable sur tous tes Macs.
+    <div class="tipjar reveal">
+      <h3>Offre-moi un café</h3>
+      <p>
+        Aucun montant minimum, aucune obligation. C'est la motivation qui
+        garde wacomd à jour quand Apple casse encore une API privée.
       </p>
 
-      <a class="btn btn-primary btn-buy" data-stripe-buy href="#">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;" aria-hidden="true">
-          <rect x="3" y="6" width="18" height="13" rx="2"/>
-          <path d="M3 10h18"/>
-          <path d="M7 15h2"/>
-        </svg>
-        Acheter — 4,99&nbsp;€
-      </a>
+      <div class="tip-options">
+        <a class="tip-btn tip-coffee" href="https://buymeacoffee.com/REPLACE_WITH_YOUR_USERNAME" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M19 7h-1V5a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v8a4 4 0 0 0 4 4h7a4 4 0 0 0 4-4v-2h1a3 3 0 0 0 0-6zm0 4h-1V9h1a1 1 0 0 1 0 2zM6 21h12a1 1 0 0 0 0-2H6a1 1 0 0 0 0 2z"/>
+          </svg>
+          Buy me a coffee
+        </a>
 
-      <div class="trust-row">
-        <span class="trust-pill">
-          <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <path d="M7 1l5 2v4c0 3-2 5-5 6-3-1-5-3-5-6V3l5-2z" stroke-linejoin="round"/>
-            <path d="M5 7l1.5 1.5L9 6" stroke-linecap="round" stroke-linejoin="round"/>
+        <a class="tip-btn tip-stripe" href="https://buy.stripe.com/REPLACE_WITH_PWYW_LINK" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="6" width="18" height="13" rx="2"/>
+            <path d="M3 10h18"/>
           </svg>
-          Paiement sécurisé
-        </span>
-        <span class="trust-pill">
-          <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <path d="M7 1l5 2v4c0 3-2 5-5 6-3-1-5-3-5-6V3l5-2z" stroke-linejoin="round"/>
-          </svg>
-          Pas d'abonnement
-        </span>
-        <span class="trust-pill">
-          <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <circle cx="7" cy="7" r="6"/>
-            <path d="M7 4v3l2 1" stroke-linecap="round"/>
-          </svg>
-          Téléchargement immédiat
-        </span>
+          Pay what you want
+        </a>
       </div>
 
-      <div class="stripe-line">
-        <svg viewBox="0 0 60 25" fill="currentColor" aria-hidden="true">
-          <path d="M59.6 14.4c0-4.3-2.1-7.7-6.1-7.7-4 0-6.5 3.4-6.5 7.6 0 5 2.9 7.5 7 7.5 2 0 3.5-.4 4.7-1.1v-3.3c-1.2.6-2.5 1-4.2 1-1.7 0-3.1-.6-3.3-2.6h8.3c.1-.4.1-1 .1-1.4zm-8.4-1.6c0-1.9 1.2-2.7 2.3-2.7s2.2.8 2.2 2.7h-4.5z M40.8 6.7c-1.6 0-2.7.8-3.3 1.3l-.2-1H34v18.7l4.1-.9V20c.6.4 1.5 1 3 1 3 0 5.8-2.4 5.8-7.6-.1-4.8-2.9-6.7-6.1-6.7zm-1 11.7c-1 0-1.6-.4-2-.8V11c.4-.5 1-.8 2-.8 1.6 0 2.7 1.8 2.7 4.1 0 2.4-1.1 4.1-2.7 4.1z M30.7.5l-4.1.9v3.3l4.1-.9z M30.7 6.9h-4.1V21h4.1V6.9z M22.2 8.1l-.3-1.2h-3.5V21h4.1v-9.5c1-1.3 2.6-1 3.1-.9V6.9c-.5-.2-2.4-.6-3.4 1.2z M14 3.4l-4 .9-.1 13.1c0 2.4 1.8 4.2 4.2 4.2 1.4 0 2.4-.3 2.9-.6v-3.3c-.5.2-3.1.9-3.1-1.5V10.4h3.1V6.9h-3.1V3.4zM4.1 11c0-.6.5-.9 1.4-.9 1.2 0 2.8.4 4 1.1V7.4c-1.3-.5-2.6-.7-4-.7C2.2 6.7 0 8.6 0 11.7c0 4.9 6.8 4.1 6.8 6.2 0 .8-.7 1-1.6 1-1.4 0-3.1-.6-4.5-1.4v3.9c1.5.7 3 1 4.5 1 3.4 0 5.7-1.7 5.7-4.9 0-5.4-6.8-4.4-6.8-6.5z"/>
-        </svg>
-        Paiement sécurisé via Stripe
-      </div>
+      <p class="tip-secondary">
+        ou plus simplement,
+        <a href="https://github.com/yanickb/wacomd" target="_blank" rel="noopener">⭐ donne une étoile sur GitHub</a> — c'est gratuit et ça aide aussi.
+      </p>
     </div>
   </section>
 
