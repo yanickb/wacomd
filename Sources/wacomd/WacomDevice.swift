@@ -107,12 +107,13 @@ final class WacomDevice {
             state.barrelButton = false
             state.eraser = false
             injector.update(state: state, model: model)
-        case .proximityEnter(let toolID, _):
+        case .proximityEnter(let toolID, let serial):
             state.inRange = true
             // Le toolID de la gomme commence par 0x0e (Linux : wacom_intuos_get_tool_type).
             // Pour le Grip Pen standard livré avec la PTH-451 (LP-180), tool ≈ 0x802.
             state.eraser = ((toolID & 0x0fff) == 0x82a)
-            Verbose.log(String(format: "proximité ON, toolID=0x%05x", toolID))
+            injector.updateToolIdentity(toolID: toolID, serial: serial, isEraser: state.eraser)
+            Verbose.log(String(format: "proximité ON, toolID=0x%05x serial=0x%llx", toolID, serial))
         case .pen(let sample):
             state.x = Double(sample.x)
             state.y = Double(sample.y)

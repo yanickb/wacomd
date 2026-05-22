@@ -25,6 +25,28 @@ and that's it. The following are **not implemented yet** :
 If your workflow depends on any of those, this driver is not enough for you
 yet. They're all on the roadmap — see [Roadmap](#roadmap).
 
+## 🛑 If you have the official Wacom driver installed: disable it first
+
+Even when Wacom's driver no longer supports your tablet, its installer
+puts a `TabletEvents` framework and several background daemons in place
+that **intercept tablet events at the system level**. Pressure-aware apps
+(Photoshop, Affinity Photo, Procreate, Krita, …) prefer that pipeline over
+the standard NSEvent tablet API, so they will receive **zero pressure**
+even when wacomd is correctly posting events.
+
+Disable the Wacom daemons (reversible, no files deleted) :
+
+```bash
+./packaging/disable-wacom-driver.sh
+```
+
+Then quit and reopen your drawing app so it reloads without the Wacom
+framework. Restore later with :
+
+```bash
+./packaging/restore-wacom-driver.sh
+```
+
 ## Status — v0.2 (tested live on macOS 26.3, Apple Silicon)
 
 | Feature                                          | Status |
