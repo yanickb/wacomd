@@ -20,10 +20,18 @@ final class TouchTracker {
     private var touches: [Int: ActiveTouch] = [:]
     private var lastScrollCentroidScreen: CGPoint?
 
+    /// Filtered cursor position for 1-finger mode. We lerp toward the raw
+    /// finger position each frame to smooth out hardware jitter.
+    private var smoothedCursor: CGPoint?
+
     /// Tap recognised if : duration < `tapMaxDuration` AND
     /// max displacement during contact < `tapMaxMovementPx`.
     private let tapMaxDuration: CFAbsoluteTime = 0.20
     private let tapMaxMovementPx: Double = 10
+
+    /// Smoothing factor for 1-finger cursor (0 = no movement, 1 = no smoothing).
+    /// 0.4 keeps the cursor responsive while filtering single-frame outliers.
+    private let cursorSmoothingAlpha: Double = 0.4
 
     /// Sensitivity for 2-finger scroll, in scroll-pixels per screen-pixel of
     /// finger movement. ~0.3 matches the feel of a MacBook trackpad swipe :
@@ -89,18 +97,33 @@ final class TouchTracker {
         switch touches.count {
         case 0:
             lastScrollCentroidScreen = nil
+            smoothedCursor = nil
         case 1:
-            // 1-finger : drive the cursor in absolute mapping
+            // 1-finger : drive the cursor with a light low-pass filter
+            // to absorb sensor jitter.
             if let touch = touches.values.first {
-                injector.moveCursor(to: touch.lastScreenPoint)
+                let raw = touch.lastScreenPoint
+                let smoothed: CGPoint
+                if let prev = smoothedCursor {
+                    smoothed = CGPoint(
+                        x: prev.x + (raw.x - prev.x) * cursorSmoothingAlpha,
+                        y: prev.y + (raw.y - prev.y) * cursorSmoothingAlpha
+                    )
+                } else {
+                    smoothed = raw
+                }
+                smoothedCursor = smoothed
+                injector.moveCursor(to: smoothed)
             }
             lastScrollCentroidScreen = nil
         case 2:
             // 2-finger : scroll
             handleTwoFingerScroll()
+            smoothedCursor = nil
         default:
             // 3+ fingers : ignore (would need private SPI for gestures)
             lastScrollCentroidScreen = nil
+            smoothedCursor = nil
         }
     }
 

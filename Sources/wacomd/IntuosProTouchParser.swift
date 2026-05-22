@@ -53,38 +53,35 @@ enum IntuosProTouchParser {
     static func decode(data: UnsafeMutablePointer<UInt8>, length: Int) -> [TouchContact] {
         guard length >= headerBytes + bytesPerSlot else { return [] }
 
-        // Status byte indicates approximate number of contacts :
-        //   0x01 + data[2] == 0x81 : idle keepalive, no finger
-        //   0x01 + data[2] != 0x81 : 1 finger active
-        //   0x02                   : 2 fingers
-        //   0x03                   : 3 fingers
-        // In all "active" cases the per-slot layout below is identical,
-        // so we just need to make sure we don't decode the idle keepalive.
+        // Status byte = number of fingers currently in contact :
+        //   0x01 + data[2] == 0x81 : idle keepalive (no finger)
+        //   0x01                    : 1 finger
+        //   0x02                    : 2 fingers
+        //   0x03                    : 3 fingers
+        // Bytes after the active slots are stale data we MUST NOT read,
+        // otherwise the cursor / scroll picks up phantom contacts that
+        // make it jump around.
         let status = data[1]
         let secondByte = data[2]
-        let isIdleKeepalive = (status == 0x01 && secondByte == 0x81)
-        if isIdleKeepalive { return [] }
+        if status == 0x01 && secondByte == 0x81 { return [] }
         if status == 0x00 { return [] }
-        // Status >= 0x80 are pen-interface heartbeats we don't care about.
-        if status >= 0x80 { return [] }
+        if status >= 0x80 { return [] }   // pen-interface heartbeat, ignore
+
+        let numFingers = min(Int(status), maxSlots)
+        guard numFingers > 0 else { return [] }
 
         var contacts: [TouchContact] = []
-        for slot in 0..<maxSlots {
+        for slot in 0..<numFingers {
             let off = headerBytes + slot * bytesPerSlot
             guard off + 7 < length else { break }
 
             let slotID = Int(data[off])
-            if slotID == 0 { continue }
-
-            // "Active contact" criterion empirically derived :
-            //  - real-finger slots have bytes [+5..+7] = `02 0X 00`
-            //  - just-released "ghost" slots have bytes [+5..+7] = `00 00 00`
-            //    and a slot ID with bit 7 set (e.g. 0x81).
-            // We treat byte+5 == 0 OR slotID high-bit set as "not in
-            // contact" — these slots carry no usable position.
+            // A real finger slot has a small slot ID (0x02..0x10) and
+            // non-zero "pressure" byte at +5. Anything else is a stale
+            // record left over by the firmware.
             let pressureByte = data[off + 5]
-            let ghosted = (slotID & 0x80) != 0
-            if pressureByte == 0 || ghosted { continue }
+            let validSlotID = (slotID >= 0x02 && slotID < 0x20)
+            if !validSlotID || pressureByte == 0 { continue }
 
             // X / Y are encoded as 16-bit big-endian values, like in the
             // original v0.3 scroll path. The previous 12-bit packed
