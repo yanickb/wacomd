@@ -2,32 +2,79 @@ import SwiftUI
 import AppKit
 import WacomdShared
 
-@main
-struct WacomdConfigApp: App {
-    @StateObject private var model = ConfigModel()
-    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+// MARK: - Entry point
 
-    var body: some Scene {
-        MenuBarExtra("wacomd", systemImage: "pencil.tip.crop.circle") {
-            ConfigView(model: model)
-                .frame(width: 320)
-        }
-        .menuBarExtraStyle(.window)
-    }
-}
+let app = NSApplication.shared
+let delegate = AppDelegate()
+app.delegate = delegate
+app.setActivationPolicy(.accessory)  // no Dock icon — menu-bar only
+app.run()
 
-/// Forces "accessory" activation policy so the app behaves as a menu-bar
-/// agent (no Dock icon, no main window) even when launched as a raw SPM
-/// binary without a .app bundle / Info.plist.
+// MARK: - AppKit menu-bar driver
+
+/// Uses NSStatusItem instead of SwiftUI's `MenuBarExtra`. The SwiftUI
+/// MenuBarExtra has a known issue on macOS 26 Tahoe where the icon
+/// silently fails to appear in the system menu bar; NSStatusItem is the
+/// battle-tested AppKit API that has shipped since macOS 10.10.
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private let model = ConfigModel()
+    private var statusItem: NSStatusItem!
+    private var popover: NSPopover!
+    private var monitor: Any?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.accessory)
+        // 1. Reserve a slot in the menu bar.
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        if let button = statusItem.button {
+            // SF Symbol icon ; on a MacBook with a notch we still want a
+            // visible glyph, so we set both the image and an accessibility
+            // description (for VoiceOver).
+            let cfg = NSImage.SymbolConfiguration(pointSize: 15, weight: .regular)
+            let image = NSImage(systemSymbolName: "pencil.tip.crop.circle",
+                                accessibilityDescription: "wacomd")?
+                .withSymbolConfiguration(cfg)
+            image?.isTemplate = true       // tints to the menu-bar's foreground colour
+            button.image = image
+            button.toolTip = "wacomd — paramétrage"
+            button.action = #selector(toggle(_:))
+            button.target = self
+            // Allow right-click to also toggle, plus left-click default.
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        }
+
+        // 2. Build the popover that hosts the SwiftUI settings panel.
+        popover = NSPopover()
+        popover.behavior = .transient            // dismiss on click-outside
+        popover.animates = true
+        popover.contentSize = NSSize(width: 320, height: 540)
+        popover.contentViewController = NSHostingController(
+            rootView: ConfigView(model: model)
+        )
+    }
+
+    @objc private func toggle(_ sender: Any?) {
+        guard let button = statusItem.button else { return }
+        if popover.isShown {
+            popover.performClose(sender)
+            return
+        }
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        // Auto-dismiss on click outside the popover.
+        if monitor == nil {
+            monitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+                self?.popover.performClose(nil)
+            }
+        }
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        if let m = monitor { NSEvent.removeMonitor(m); monitor = nil }
     }
 }
 
 // MARK: - View model
 
-@MainActor
 final class ConfigModel: ObservableObject {
     @Published var config: WacomdConfig {
         didSet { scheduleSave() }
@@ -40,9 +87,8 @@ final class ConfigModel: ObservableObject {
     init() {
         self.config = ConfigStore.shared.current
         refreshDaemonStatus()
-        // Poll daemon presence once a second.
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refreshDaemonStatus() }
+            DispatchQueue.main.async { self?.refreshDaemonStatus() }
         }
     }
 
@@ -50,7 +96,6 @@ final class ConfigModel: ObservableObject {
         daemonRunning = (DaemonControl.runningPID() != nil)
     }
 
-    /// Debounce writes so dragging a slider doesn't fsync the file 60×/sec.
     private func scheduleSave() {
         saveWorkItem?.cancel()
         let snapshot = config
@@ -90,17 +135,7 @@ struct ConfigView: View {
             footer
         }
         .padding(14)
-    }
-
-    private var masterToggle: some View {
-        Toggle(isOn: $model.config.touchEnabled) {
-            HStack(spacing: 6) {
-                Image(systemName: "hand.tap.fill")
-                Text("Tactile").font(.headline)
-            }
-        }
-        .toggleStyle(.switch)
-        .help("Active ou désactive entièrement la surface tactile (1, 2 et 3 doigts).")
+        .frame(width: 320)
     }
 
     private var header: some View {
@@ -115,6 +150,17 @@ struct ConfigView: View {
             }
             Spacer()
         }
+    }
+
+    private var masterToggle: some View {
+        Toggle(isOn: $model.config.touchEnabled) {
+            HStack(spacing: 6) {
+                Image(systemName: "hand.tap.fill")
+                Text("Tactile").font(.headline)
+            }
+        }
+        .toggleStyle(.switch)
+        .help("Active ou désactive entièrement la surface tactile (1, 2 et 3 doigts).")
     }
 
     private var togglesSection: some View {
