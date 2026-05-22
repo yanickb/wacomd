@@ -7,7 +7,11 @@ import WacomdShared
 let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate
-app.setActivationPolicy(.accessory)  // no Dock icon — menu-bar only
+// .regular = Dock icon visible + can have a main window.
+// On macOS Tahoe, .accessory + MenuBarExtra is too fragile for some
+// configurations (notch, menu-bar saturation, Control-Center routing) ;
+// a regular app is guaranteed to be visible.
+app.setActivationPolicy(.regular)
 app.run()
 
 // MARK: - AppKit menu-bar driver
@@ -16,69 +20,89 @@ app.run()
 /// MenuBarExtra has a known issue on macOS 26 Tahoe where the icon
 /// silently fails to appear in the system menu bar; NSStatusItem is the
 /// battle-tested AppKit API that has shipped since macOS 10.10.
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let model = ConfigModel()
-    private var statusItem: NSStatusItem!
-    private var popover: NSPopover!
-    private var monitor: Any?
+    private var statusItem: NSStatusItem?
+    private var popover: NSPopover?
+    private var window: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // 1. Reserve a FIXED-WIDTH slot in the menu bar (NOT variableLength).
-        //
-        // On macOS 26 Tahoe with a notched MacBook, NSStatusItem.variableLength
-        // lets the OS hide the item inside Control Center when the main menu
-        // bar has no room. A fixed positive length forces the item to live in
-        // the main bar and reserves exactly that many points of space.
-        statusItem = NSStatusBar.system.statusItem(withLength: 28)
-        statusItem.isVisible = true
-        statusItem.behavior = []   // never auto-collapse into Control Center
+        // ---- Main window : guaranteed-visible, normal macOS window. ------
+        let host = NSHostingController(rootView: ConfigView(model: model))
+        let win = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 360, height: 580),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        win.title = "Wacomd Config"
+        win.titlebarAppearsTransparent = true
+        win.titleVisibility = .visible
+        win.contentViewController = host
+        win.center()
+        win.isReleasedWhenClosed = false
+        win.delegate = self
+        self.window = win
 
-        if let button = statusItem.button {
-            let cfg = NSImage.SymbolConfiguration(pointSize: 15, weight: .regular)
-            let image = NSImage(systemSymbolName: "pencil.tip.crop.circle",
-                                accessibilityDescription: "wacomd")?
-                .withSymbolConfiguration(cfg)
-            image?.isTemplate = true       // tints to the menu-bar's foreground colour
-            button.image = image
-            // Fallback : if the SF Symbol fails to load (older macOS, restricted
-            // glyph access), a short title still tells the user the item is there.
-            if image == nil {
-                button.title = "wacomd"
+        // ---- Menu-bar item (bonus). If macOS Tahoe routes it into Control
+        //      Center or hides it behind the notch the user can still
+        //      access the app via the Dock icon + window.
+        if let bar = NSStatusBar.system.statusItem(withLength: 28) as NSStatusItem? {
+            bar.isVisible = true
+            if let button = bar.button {
+                let cfg = NSImage.SymbolConfiguration(pointSize: 15, weight: .regular)
+                let img = NSImage(systemSymbolName: "pencil.tip.crop.circle",
+                                  accessibilityDescription: "wacomd")?
+                    .withSymbolConfiguration(cfg)
+                img?.isTemplate = true
+                button.image = img
+                if img == nil { button.title = "wacomd" }
+                button.toolTip = "Wacomd Config"
+                button.action = #selector(toggle(_:))
+                button.target = self
+                button.sendAction(on: [.leftMouseUp, .rightMouseUp])
             }
-            button.toolTip = "wacomd — paramétrage"
-            button.action = #selector(toggle(_:))
-            button.target = self
-            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+            statusItem = bar
+
+            popover = NSPopover()
+            popover?.behavior = .transient
+            popover?.animates = true
+            popover?.contentSize = NSSize(width: 320, height: 540)
+            popover?.contentViewController = NSHostingController(
+                rootView: ConfigView(model: model)
+            )
         }
 
-        // 2. Build the popover that hosts the SwiftUI settings panel.
-        popover = NSPopover()
-        popover.behavior = .transient            // dismiss on click-outside
-        popover.animates = true
-        popover.contentSize = NSSize(width: 320, height: 540)
-        popover.contentViewController = NSHostingController(
-            rootView: ConfigView(model: model)
-        )
+        // ---- Show the window front-and-centre at launch.
+        NSApp.activate(ignoringOtherApps: true)
+        win.makeKeyAndOrderFront(nil)
     }
 
-    @objc private func toggle(_ sender: Any?) {
-        guard let button = statusItem.button else { return }
-        if popover.isShown {
-            popover.performClose(sender)
-            return
-        }
-        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-        // Auto-dismiss on click outside the popover.
-        if monitor == nil {
-            monitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-                self?.popover.performClose(nil)
-            }
-        }
+    // Close button on the window : hide instead of terminate, so the menu
+    // bar / Dock icon path still works for re-opening.
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        sender.orderOut(nil)
+        NSApp.setActivationPolicy(.accessory)   // hide Dock icon while hidden
+        return false
+    }
+
+    // When the user re-activates the Dock icon, restore the window.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showWindow()
+        return true
+    }
+
+    private func showWindow() {
+        NSApp.setActivationPolicy(.regular)
+        window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    func applicationWillTerminate(_ notification: Notification) {
-        if let m = monitor { NSEvent.removeMonitor(m); monitor = nil }
+    @objc private func toggle(_ sender: Any?) {
+        // Status-bar click : open the window. Simpler and more reliable than
+        // the popover, which can get cut off near the screen edge with the
+        // notch.
+        showWindow()
     }
 }
 
