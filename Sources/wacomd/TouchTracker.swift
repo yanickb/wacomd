@@ -145,8 +145,10 @@ final class TouchTracker {
     // MARK: - 1-finger cursor (relative)
 
     private func applyCursorDelta(dx: Int, dy: Int) {
-        // Ignore zero-deltas (no movement frame)
-        guard dx != 0 || dy != 0 else { return }
+        // Sensor jitter regularly produces ±1 deltas on a stationary finger.
+        // Filter them so we don't a) pollute the cursor with noise and
+        // b) tag the contact as "moved" and accidentally suppress real taps.
+        guard abs(dx) > 1 || abs(dy) > 1 else { return }
         let screenDx = Double(dx) * cursorSensitivity
         let screenDy = Double(dy) * cursorSensitivity
         injector.moveCursorBy(dx: screenDx, dy: screenDy)

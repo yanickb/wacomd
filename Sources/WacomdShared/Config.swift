@@ -19,9 +19,13 @@ public struct WacomdConfig: Codable, Equatable {
     public var threeFingerSwipeThreshold: Double = 200
 
     // ---- Tap recognition --------------------------------------------------
-    public var tapMaxDurationMs: Int = 200
+    /// Max contact duration to still be considered a "tap" (not a drag).
+    /// 120 ms is on the tight side — only sharp deliberate taps qualify.
+    public var tapMaxDurationMs: Int = 120
     /// Max drift in raw tablet units during a contact for it to still be a tap.
-    public var tapMaxRawMovement: Double = 60
+    /// 25 ≈ 0.6 mm on a PTH-451 ; tighter than this and even real taps miss,
+    /// looser and slow short cursor movements get hijacked as taps.
+    public var tapMaxRawMovement: Double = 25
 
     public init() {}
 

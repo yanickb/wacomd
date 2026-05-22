@@ -119,6 +119,21 @@ struct ConfigView: View {
                 range: 50...500,
                 format: { String(format: "%.0f", $0) }
             )
+            sliderRow(
+                label: "Durée max tap (ms)",
+                value: Binding(
+                    get: { Double(model.config.tapMaxDurationMs) },
+                    set: { model.config.tapMaxDurationMs = Int($0) }
+                ),
+                range: 50...300,
+                format: { String(format: "%.0f", $0) }
+            )
+            sliderRow(
+                label: "Drift max tap",
+                value: $model.config.tapMaxRawMovement,
+                range: 5...100,
+                format: { String(format: "%.0f", $0) }
+            )
         }
     }
 
