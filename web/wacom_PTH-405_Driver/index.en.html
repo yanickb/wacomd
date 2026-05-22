@@ -9,236 +9,12 @@
 <meta property="og:description" content="Pen, pressure, multi-finger touch. Free driver, paid configurator app.">
 <meta property="og:image" content="ghost.png">
 <meta property="og:type" content="website">
+<meta name="theme-color" content="#050a18">
 <link rel="icon" href="ghost.png" type="image/png">
 <link rel="alternate" hreflang="fr" href="./index.html">
 <link rel="alternate" hreflang="en" href="./index.en.html">
-<style>
-  :root {
-    --bg: #050a18;
-    --bg-soft: #0c1428;
-    --card: #11192e;
-    --border: #1d2a4a;
-    --accent: #4ea0ff;
-    --accent-glow: rgba(78,160,255,0.35);
-    --text: #f1f5fb;
-    --muted: #93a3c2;
-    --good: #59d28e;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html { scroll-behavior: smooth; }
-  body {
-    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
-    color: var(--text);
-    background:
-      radial-gradient(1100px 700px at 50% -200px, rgba(78,160,255,0.18), transparent 60%),
-      radial-gradient(800px 500px at 90% 30%, rgba(78,160,255,0.08), transparent 60%),
-      var(--bg);
-    min-height: 100vh;
-  }
-  a { color: var(--accent); text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  code, pre {
-    font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
-    font-size: 0.92em;
-    color: #c7d2e8;
-  }
-  pre {
-    background: var(--bg-soft);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 18px 20px;
-    overflow-x: auto;
-  }
-
-  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
-  header.top {
-    padding: 22px 0;
-    display: flex; align-items: center; justify-content: space-between;
-  }
-  header.top a.logo {
-    display: flex; align-items: center; gap: 10px;
-    color: var(--text); font-weight: 600; font-size: 18px;
-  }
-  header.top a.logo img { width: 32px; height: 32px; border-radius: 7px; }
-  header.top nav { display: flex; gap: 22px; font-size: 14.5px; align-items: center; }
-  header.top nav a { color: var(--muted); }
-  header.top nav a:hover { color: var(--text); text-decoration: none; }
-  header.top nav a.github {
-    display: inline-flex; align-items: center; gap: 6px;
-    color: var(--text);
-    background: rgba(255,255,255,0.04);
-    border: 1px solid var(--border);
-    padding: 7px 13px;
-    border-radius: 9px;
-    font-weight: 600;
-  }
-  header.top nav a.github:hover { background: rgba(255,255,255,0.08); border-color: #2c3d63; }
-  header.top nav a.github svg { width: 16px; height: 16px; }
-  .lang-switch {
-    display: inline-flex; gap: 0;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    overflow: hidden;
-    font-size: 12.5px;
-  }
-  .lang-switch a {
-    color: var(--muted);
-    padding: 6px 10px;
-    border-right: 1px solid var(--border);
-  }
-  .lang-switch a:last-child { border-right: none; }
-  .lang-switch a.active {
-    color: var(--text);
-    background: rgba(78,160,255,0.12);
-  }
-
-  .hero { padding: 56px 0 72px; text-align: center; }
-  .hero .mascot {
-    width: 220px; height: 220px;
-    border-radius: 36px;
-    box-shadow: 0 25px 60px -10px var(--accent-glow), 0 8px 24px rgba(0,0,0,0.5);
-    margin: 0 auto 28px;
-    display: block;
-  }
-  .hero .tag {
-    display: inline-block;
-    color: var(--accent);
-    background: rgba(78,160,255,0.08);
-    border: 1px solid rgba(78,160,255,0.25);
-    border-radius: 999px;
-    padding: 5px 14px;
-    font-size: 13px;
-    letter-spacing: 0.02em;
-    margin-bottom: 18px;
-  }
-  .hero h1 {
-    font-size: clamp(34px, 5vw, 56px);
-    line-height: 1.05;
-    letter-spacing: -0.02em;
-    font-weight: 700;
-    margin-bottom: 18px;
-  }
-  .hero p.lead {
-    font-size: 18px;
-    color: var(--muted);
-    max-width: 640px;
-    margin: 0 auto 32px;
-  }
-  .hero .ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
-  .btn {
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 13px 22px;
-    border-radius: 11px;
-    font-weight: 600;
-    font-size: 15px;
-    border: 1px solid transparent;
-    transition: transform 0.08s ease, box-shadow 0.2s ease, background 0.2s ease;
-  }
-  .btn:hover { text-decoration: none; transform: translateY(-1px); }
-  .btn-primary {
-    background: var(--accent);
-    color: #02112b;
-    box-shadow: 0 8px 30px -8px var(--accent-glow);
-  }
-  .btn-primary:hover { background: #7bb6ff; }
-  .btn-ghost {
-    color: var(--text);
-    border-color: var(--border);
-    background: rgba(255,255,255,0.02);
-  }
-  .btn-ghost:hover { background: rgba(255,255,255,0.05); border-color: #2c3d63; }
-
-  section { padding: 56px 0; }
-  section h2 {
-    font-size: 28px;
-    font-weight: 700;
-    letter-spacing: -0.01em;
-    margin-bottom: 10px;
-  }
-  section .sub { color: var(--muted); margin-bottom: 32px; max-width: 600px; }
-
-  .pricing { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
-  @media (max-width: 720px) { .pricing { grid-template-columns: 1fr; } }
-  .price-card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 18px;
-    padding: 30px 28px;
-    position: relative;
-  }
-  .price-card .label {
-    font-size: 12.5px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--muted);
-    margin-bottom: 14px;
-  }
-  .price-card h3 { font-size: 22px; margin-bottom: 8px; }
-  .price-card .price {
-    font-size: 36px; font-weight: 700; letter-spacing: -0.02em;
-    margin: 14px 0;
-  }
-  .price-card .price small {
-    font-size: 14px; font-weight: 400; color: var(--muted);
-    margin-left: 4px;
-  }
-  .price-card ul { list-style: none; margin: 16px 0 24px; }
-  .price-card ul li {
-    color: var(--muted);
-    padding: 5px 0 5px 24px;
-    position: relative;
-    font-size: 14.5px;
-  }
-  .price-card ul li::before {
-    content: ""; position: absolute; left: 0; top: 12px;
-    width: 14px; height: 14px;
-    background: var(--good);
-    -webkit-mask: url("data:image/svg+xml;utf8,<svg viewBox='0 0 14 14' xmlns='http://www.w3.org/2000/svg'><path d='M2 7l3 3 7-7' stroke='black' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>") center/contain no-repeat;
-            mask: url("data:image/svg+xml;utf8,<svg viewBox='0 0 14 14' xmlns='http://www.w3.org/2000/svg'><path d='M2 7l3 3 7-7' stroke='black' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>") center/contain no-repeat;
-  }
-  .price-card.featured {
-    border-color: rgba(78,160,255,0.45);
-    box-shadow: 0 0 0 1px rgba(78,160,255,0.15), 0 30px 80px -25px var(--accent-glow);
-  }
-  .price-card .badge {
-    position: absolute; top: 18px; right: 18px;
-    background: rgba(89,210,142,0.15); color: var(--good);
-    border: 1px solid rgba(89,210,142,0.35);
-    border-radius: 999px;
-    font-size: 11.5px; letter-spacing: 0.05em;
-    padding: 4px 10px;
-    text-transform: uppercase;
-  }
-
-  .features { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 22px; }
-  @media (max-width: 720px) { .features { grid-template-columns: 1fr; } }
-  .feature {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 22px 20px;
-  }
-  .feature h4 { font-size: 15px; margin-bottom: 6px; }
-  .feature p { font-size: 14px; color: var(--muted); line-height: 1.5; }
-
-  .tech-grid {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 28px;
-  }
-  @media (max-width: 720px) { .tech-grid { grid-template-columns: 1fr; } }
-  .tech-grid h3 { font-size: 18px; margin-bottom: 10px; }
-  .tech-grid p, .tech-grid li { font-size: 14.5px; color: var(--muted); line-height: 1.65; }
-  .tech-grid ul { margin-left: 18px; }
-
-  footer {
-    border-top: 1px solid var(--border);
-    margin-top: 80px;
-    padding: 30px 0 40px;
-    color: var(--muted);
-    font-size: 13.5px;
-    text-align: center;
-  }
-  footer p { margin: 4px 0; }
-</style>
+<link rel="preload" href="ghost.png" as="image">
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
@@ -254,15 +30,18 @@
         <a href="index.html">FR</a>
         <a href="index.en.html" class="active">EN</a>
       </div>
-      <a href="https://github.com/yanickb/wacomd" target="_blank" rel="noopener" class="github">
-        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      <a href="https://github.com/yanickb/wacomd" target="_blank" rel="noopener" class="github" aria-label="View on GitHub">
+        <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
         GitHub
       </a>
     </nav>
   </header>
 
   <section class="hero">
-    <img class="mascot" src="ghost.png" alt="">
+    <div class="mascot-wrap">
+      <div class="mascot-halo" aria-hidden="true"></div>
+      <img class="mascot" src="ghost.png" alt="" width="220" height="220">
+    </div>
     <span class="tag">macOS 26 Tahoe · Apple Silicon</span>
     <h1>Bring your Wacom Intuos Pro Small back to life.</h1>
     <p class="lead">
@@ -274,15 +53,15 @@
     <div class="ctas">
       <a class="btn btn-primary" href="#download">Download the free driver</a>
       <a class="btn btn-ghost" href="https://github.com/yanickb/wacomd" target="_blank" rel="noopener">
-        <svg viewBox="0 0 16 16" fill="currentColor" style="width:16px;height:16px;"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        <svg viewBox="0 0 16 16" fill="currentColor" style="width:16px;height:16px;" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
         View on GitHub
       </a>
     </div>
   </section>
 
   <section id="download">
-    <h2>Free driver, paid configurator app</h2>
-    <p class="sub">
+    <h2 class="reveal">Free driver, paid configurator app</h2>
+    <p class="sub reveal">
       The driver is and will stay free and open-source. The configurator app
       adds a menu-bar settings interface with live sliders, toggles and
       hot-reload of the daemon.
@@ -290,7 +69,7 @@
 
     <div class="pricing">
 
-      <div class="price-card">
+      <div class="price-card reveal">
         <div class="label">Open Source</div>
         <h3>wacomd driver</h3>
         <div class="price">Free <small>· MIT</small></div>
@@ -306,7 +85,7 @@
         <a class="btn btn-ghost" href="wacomd-latest.pkg" download>Download&nbsp;.pkg</a>
       </div>
 
-      <div class="price-card featured">
+      <div class="price-card featured reveal">
         <div class="badge">Pro</div>
         <div class="label">Native macOS app</div>
         <h3>Wacomd&nbsp;Config</h3>
@@ -327,31 +106,31 @@
   </section>
 
   <section id="features">
-    <h2>What works</h2>
-    <p class="sub">Tested live on PTH-451 / macOS 26.3 / Apple Silicon. ~200 events/s on the pen, matching the Wacom HID native rate.</p>
+    <h2 class="reveal">What works</h2>
+    <p class="sub reveal">Tested live on PTH-451 / macOS 26.3 / Apple Silicon. ~200 events/s on the pen, matching the Wacom HID native rate.</p>
 
     <div class="features">
-      <div class="feature">
+      <div class="feature reveal">
         <h4>Absolute pen</h4>
         <p>1:1 position mapping to the primary screen, linear 11-bit pressure curve read by every app that consumes <code>NSEvent.tabletPoint</code>.</p>
       </div>
-      <div class="feature">
+      <div class="feature reveal">
         <h4>Automatic eraser</h4>
         <p>Detected from the toolID in the Wacom proximity packet. Photoshop switches to the eraser tool the moment you flip the pen.</p>
       </div>
-      <div class="feature">
+      <div class="feature reveal">
         <h4>Trackpad mode</h4>
         <p>The touch surface drives the cursor in relative trackpad mode, with non-linear acceleration curve and sub-pixel accumulation.</p>
       </div>
-      <div class="feature">
+      <div class="feature reveal">
         <h4>2-finger scroll</h4>
         <p>Smoothed centroid, sub-pixel accumulator, sensitivity adjustable from 0.05 to 2.0 px per tablet unit. "Natural / classic" direction toggle.</p>
       </div>
-      <div class="feature">
+      <div class="feature reveal">
         <h4>3-finger gestures</h4>
         <p>Vertical swipe = Mission Control / Exposé. Horizontal swipe = switch Spaces. Tap = middle click.</p>
       </div>
-      <div class="feature">
+      <div class="feature reveal">
         <h4>Coexists with Wacom</h4>
         <p>If the official Wacom driver is still installed, a script disables its daemons without removing anything — fully reversible.</p>
       </div>
@@ -359,12 +138,11 @@
   </section>
 
   <section id="tech">
-    <h2>Technical overview</h2>
-    <p class="sub">For the curious and for anyone willing to port wacomd to other Wacom models.</p>
+    <h2 class="reveal">Technical overview</h2>
+    <p class="sub reveal">For the curious and for anyone willing to port wacomd to other Wacom models.</p>
 
     <div class="tech-grid">
-
-      <div>
+      <div class="reveal">
         <h3>Architecture</h3>
         <p>
           Swift userspace daemon using <code>IOHIDManager</code> to read the
@@ -375,8 +153,7 @@
           entitlement — every sensitive capability is gated by TCC at runtime.
         </p>
       </div>
-
-      <div>
+      <div class="reveal">
         <h3>Pen protocol</h3>
         <p>
           Intuos5/Pro format reverse-engineered from the Linux driver
@@ -389,8 +166,7 @@
           <li>Proximity enter/leave on Report ID 0xc0</li>
         </ul>
       </div>
-
-      <div>
+      <div class="reveal">
         <h3>Touch protocol</h3>
         <p>
           Multi-touch surface in 12-bit asymmetric packed format: each slot
@@ -401,8 +177,7 @@
           (IOUSBLib).
         </p>
       </div>
-
-      <div>
+      <div class="reveal">
         <h3>Configuration</h3>
         <p>
           JSON file at <code>~/Library/Application Support/wacomd/config.json</code>.
@@ -411,14 +186,13 @@
           No service restart needed.
         </p>
       </div>
-
     </div>
   </section>
 
   <section>
-    <h2>Compatibility</h2>
+    <h2 class="reveal">Compatibility</h2>
     <div class="tech-grid">
-      <div>
+      <div class="reveal">
         <h3>System</h3>
         <ul>
           <li>macOS&nbsp;26 Tahoe — tested</li>
@@ -427,7 +201,7 @@
           <li>Apple Silicon&nbsp;+ Intel</li>
         </ul>
       </div>
-      <div>
+      <div class="reveal">
         <h3>Tablets</h3>
         <ul>
           <li>Wacom Intuos Pro Small — PTH-451 (VID 0x056a / PID 0x0314) ✓ tested</li>
@@ -439,19 +213,62 @@
   </section>
 
   <section id="buy">
-    <h2>Buy Wacomd Config</h2>
-    <p class="sub">
+    <h2 class="reveal">Buy Wacomd Config</h2>
+    <p class="sub reveal">
       A personal licence, one-time payment, valid on all your Macs.
       The driver itself stays free and open-source — you don't need to buy
       the app to make your tablet work.
     </p>
-    <div class="price-card featured" style="max-width: 480px;">
-      <div class="label">Wacomd Config — €4.99</div>
-      <p style="color: var(--muted); font-size: 14.5px; margin-top: 6px;">
-        Secure checkout via Stripe.
-        Instant download of the signed and notarised build.
+
+    <div class="buy-block reveal">
+      <div class="label">Wacomd Config</div>
+      <div class="price-line">
+        <span class="amount">€4.99</span>
+        <span class="terms">one-time payment · no subscription</span>
+      </div>
+      <p class="micro">
+        Instant download of the signed and Apple-notarised build.
+        Personal licence valid on all your Macs.
       </p>
-      <a class="btn btn-primary" style="margin-top: 20px;" href="https://buy.stripe.com/PLACEHOLDER_LINK">Buy — €4.99</a>
+
+      <a class="btn btn-primary btn-buy" data-stripe-buy href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;" aria-hidden="true">
+          <rect x="3" y="6" width="18" height="13" rx="2"/>
+          <path d="M3 10h18"/>
+          <path d="M7 15h2"/>
+        </svg>
+        Buy — €4.99
+      </a>
+
+      <div class="trust-row">
+        <span class="trust-pill">
+          <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M7 1l5 2v4c0 3-2 5-5 6-3-1-5-3-5-6V3l5-2z" stroke-linejoin="round"/>
+            <path d="M5 7l1.5 1.5L9 6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Secure payment
+        </span>
+        <span class="trust-pill">
+          <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M7 1l5 2v4c0 3-2 5-5 6-3-1-5-3-5-6V3l5-2z" stroke-linejoin="round"/>
+          </svg>
+          No subscription
+        </span>
+        <span class="trust-pill">
+          <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="7" cy="7" r="6"/>
+            <path d="M7 4v3l2 1" stroke-linecap="round"/>
+          </svg>
+          Instant download
+        </span>
+      </div>
+
+      <div class="stripe-line">
+        <svg viewBox="0 0 60 25" fill="currentColor" aria-hidden="true">
+          <path d="M59.6 14.4c0-4.3-2.1-7.7-6.1-7.7-4 0-6.5 3.4-6.5 7.6 0 5 2.9 7.5 7 7.5 2 0 3.5-.4 4.7-1.1v-3.3c-1.2.6-2.5 1-4.2 1-1.7 0-3.1-.6-3.3-2.6h8.3c.1-.4.1-1 .1-1.4zm-8.4-1.6c0-1.9 1.2-2.7 2.3-2.7s2.2.8 2.2 2.7h-4.5z M40.8 6.7c-1.6 0-2.7.8-3.3 1.3l-.2-1H34v18.7l4.1-.9V20c.6.4 1.5 1 3 1 3 0 5.8-2.4 5.8-7.6-.1-4.8-2.9-6.7-6.1-6.7zm-1 11.7c-1 0-1.6-.4-2-.8V11c.4-.5 1-.8 2-.8 1.6 0 2.7 1.8 2.7 4.1 0 2.4-1.1 4.1-2.7 4.1z M30.7.5l-4.1.9v3.3l4.1-.9z M30.7 6.9h-4.1V21h4.1V6.9z M22.2 8.1l-.3-1.2h-3.5V21h4.1v-9.5c1-1.3 2.6-1 3.1-.9V6.9c-.5-.2-2.4-.6-3.4 1.2z M14 3.4l-4 .9-.1 13.1c0 2.4 1.8 4.2 4.2 4.2 1.4 0 2.4-.3 2.9-.6v-3.3c-.5.2-3.1.9-3.1-1.5V10.4h3.1V6.9h-3.1V3.4zM4.1 11c0-.6.5-.9 1.4-.9 1.2 0 2.8.4 4 1.1V7.4c-1.3-.5-2.6-.7-4-.7C2.2 6.7 0 8.6 0 11.7c0 4.9 6.8 4.1 6.8 6.2 0 .8-.7 1-1.6 1-1.4 0-3.1-.6-4.5-1.4v3.9c1.5.7 3 1 4.5 1 3.4 0 5.7-1.7 5.7-4.9 0-5.4-6.8-4.4-6.8-6.5z"/>
+        </svg>
+        Secure payment via Stripe
+      </div>
     </div>
   </section>
 
@@ -466,5 +283,6 @@
 
 </div>
 
+<script src="app.js" defer></script>
 </body>
 </html>
