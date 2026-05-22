@@ -23,22 +23,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var monitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // 1. Reserve a slot in the menu bar.
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        // 1. Reserve a FIXED-WIDTH slot in the menu bar (NOT variableLength).
+        //
+        // On macOS 26 Tahoe with a notched MacBook, NSStatusItem.variableLength
+        // lets the OS hide the item inside Control Center when the main menu
+        // bar has no room. A fixed positive length forces the item to live in
+        // the main bar and reserves exactly that many points of space.
+        statusItem = NSStatusBar.system.statusItem(withLength: 28)
+        statusItem.isVisible = true
+        statusItem.behavior = []   // never auto-collapse into Control Center
+
         if let button = statusItem.button {
-            // SF Symbol icon ; on a MacBook with a notch we still want a
-            // visible glyph, so we set both the image and an accessibility
-            // description (for VoiceOver).
             let cfg = NSImage.SymbolConfiguration(pointSize: 15, weight: .regular)
             let image = NSImage(systemSymbolName: "pencil.tip.crop.circle",
                                 accessibilityDescription: "wacomd")?
                 .withSymbolConfiguration(cfg)
             image?.isTemplate = true       // tints to the menu-bar's foreground colour
             button.image = image
+            // Fallback : if the SF Symbol fails to load (older macOS, restricted
+            // glyph access), a short title still tells the user the item is there.
+            if image == nil {
+                button.title = "wacomd"
+            }
             button.toolTip = "wacomd — paramétrage"
             button.action = #selector(toggle(_:))
             button.target = self
-            // Allow right-click to also toggle, plus left-click default.
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
 
