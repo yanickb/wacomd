@@ -235,8 +235,12 @@ final class TouchTracker {
         let dy = centroid.y - prev.y
         if abs(dx) < scrollDeadbandRaw && abs(dy) < scrollDeadbandRaw { return }
 
-        scrollAccumDx += -dx * scrollSensitivity
-        scrollAccumDy += -dy * scrollSensitivity
+        // Sign convention :
+        //   natural   : finger ↓  → page ↓  (scrollAccumDy negative when dy>0)
+        //   classic   : finger ↓  → page ↑  (scrollAccumDy positive when dy>0)
+        let sign: Double = config.naturalScroll ? -1.0 : 1.0
+        scrollAccumDx += sign * dx * scrollSensitivity
+        scrollAccumDy += sign * dy * scrollSensitivity
 
         let outDx = clamp(scrollAccumDx, -scrollMaxPerEvent, scrollMaxPerEvent)
                         .rounded(.toNearestOrEven)

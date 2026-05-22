@@ -93,6 +93,8 @@ struct ConfigView: View {
         VStack(alignment: .leading, spacing: 6) {
             Toggle("Curseur 1 doigt",   isOn: $model.config.oneFingerCursor)
             Toggle("Scroll 2 doigts",   isOn: $model.config.twoFingerScroll)
+            Toggle("Scroll naturel",    isOn: $model.config.naturalScroll)
+                .help("Activé : doigt ↓ = page ↓ (style macOS). Désactivé : doigt ↓ = page ↑ (style classique).")
             Toggle("Gestes 3 doigts",   isOn: $model.config.threeFingerSwipes)
             Toggle("Tap to click",      isOn: $model.config.tapToClick)
         }

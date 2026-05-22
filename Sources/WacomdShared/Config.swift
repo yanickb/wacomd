@@ -10,6 +10,11 @@ public struct WacomdConfig: Codable, Equatable {
     public var threeFingerSwipes: Bool = true
     public var tapToClick:        Bool = true
 
+    /// When true : finger moves down → page goes down (macOS "Natural
+    /// scrolling" feel). When false : finger moves down → page goes up
+    /// (Windows / pre-Lion macOS / classic mouse-wheel feel).
+    public var naturalScroll: Bool = false
+
     // ---- Sensitivities (raw-tablet-units → screen-pixels) -----------------
     /// 1-finger cursor : 0.35 ≈ MacBook trackpad "Tracking speed 5/10"
     public var cursorSensitivity: Double = 0.35
@@ -28,6 +33,30 @@ public struct WacomdConfig: Codable, Equatable {
     public var tapMaxRawMovement: Double = 25
 
     public init() {}
+
+    /// Custom decoder so adding new fields doesn't reject existing config
+    /// files — missing keys fall back to the default value of that field.
+    private enum CodingKeys: String, CodingKey {
+        case oneFingerCursor, twoFingerScroll, threeFingerSwipes, tapToClick
+        case naturalScroll
+        case cursorSensitivity, scrollSensitivity, threeFingerSwipeThreshold
+        case tapMaxDurationMs, tapMaxRawMovement
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = WacomdConfig()  // baseline of defaults
+        self.oneFingerCursor   = try c.decodeIfPresent(Bool.self,   forKey: .oneFingerCursor)   ?? d.oneFingerCursor
+        self.twoFingerScroll   = try c.decodeIfPresent(Bool.self,   forKey: .twoFingerScroll)   ?? d.twoFingerScroll
+        self.threeFingerSwipes = try c.decodeIfPresent(Bool.self,   forKey: .threeFingerSwipes) ?? d.threeFingerSwipes
+        self.tapToClick        = try c.decodeIfPresent(Bool.self,   forKey: .tapToClick)        ?? d.tapToClick
+        self.naturalScroll     = try c.decodeIfPresent(Bool.self,   forKey: .naturalScroll)     ?? d.naturalScroll
+        self.cursorSensitivity = try c.decodeIfPresent(Double.self, forKey: .cursorSensitivity) ?? d.cursorSensitivity
+        self.scrollSensitivity = try c.decodeIfPresent(Double.self, forKey: .scrollSensitivity) ?? d.scrollSensitivity
+        self.threeFingerSwipeThreshold = try c.decodeIfPresent(Double.self, forKey: .threeFingerSwipeThreshold) ?? d.threeFingerSwipeThreshold
+        self.tapMaxDurationMs  = try c.decodeIfPresent(Int.self,    forKey: .tapMaxDurationMs)  ?? d.tapMaxDurationMs
+        self.tapMaxRawMovement = try c.decodeIfPresent(Double.self, forKey: .tapMaxRawMovement) ?? d.tapMaxRawMovement
+    }
 
     // ---- Where the config lives ------------------------------------------
     public static var defaultPath: URL {
