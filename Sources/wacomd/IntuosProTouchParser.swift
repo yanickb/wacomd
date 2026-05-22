@@ -10,8 +10,10 @@ struct TouchContact: Equatable {
     let y: Int
 }
 
-/// Logical max of the 12-bit packed touch coordinates.
-let maxTouchAxis: Int = 4095
+/// Logical max of the 16-bit big-endian touch coordinates.
+/// Empirically observed values cover roughly 0..0xC000 on a PTH-451,
+/// but we normalise against the full 16-bit range for safety.
+let maxTouchAxis: Int = 65535
 
 /// Decoder for the multi-touch reports of the Wacom Intuos Pro family.
 ///
@@ -84,15 +86,17 @@ enum IntuosProTouchParser {
             let ghosted = (slotID & 0x80) != 0
             if pressureByte == 0 || ghosted { continue }
 
-            // 12-bit X/Y packed across 3 bytes (Intuos5 touch layout) :
-            //   X = (b[1] << 4)  | (b[2] >> 4)
-            //   Y = ((b[2] & 0x0f) << 8) | b[3]
-            // Max ≈ 4095 on each axis.
-            let b1 = Int(data[off + 1])
-            let b2 = Int(data[off + 2])
-            let b3 = Int(data[off + 3])
-            let x = (b1 << 4) | (b2 >> 4)
-            let y = ((b2 & 0x0f) << 8) | b3
+            // X / Y are encoded as 16-bit big-endian values, like in the
+            // original v0.3 scroll path. The previous 12-bit packed
+            // interpretation mixed nibbles between axes and caused
+            // 256-unit cursor jumps for sub-pixel finger movements.
+            //
+            //   X = (b[1] << 8) | b[2]
+            //   Y = (b[3] << 8) | b[4]
+            //
+            // Range observed in practice : 0..~0xC000.
+            let x = (Int(data[off + 1]) << 8) | Int(data[off + 2])
+            let y = (Int(data[off + 3]) << 8) | Int(data[off + 4])
 
             contacts.append(TouchContact(
                 slotID: slotID,
