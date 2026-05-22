@@ -352,6 +352,106 @@ section .sub {
   text-transform: uppercase;
 }
 
+/* ---------------- Download card (single, replaces dual pricing) ---------------- */
+.download-card {
+  max-width: 720px;
+  margin: 0 auto;
+  background: var(--card);
+  border: 1px solid rgba(78, 160, 255, 0.45);
+  border-radius: 20px;
+  padding: 32px 32px 28px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 30px 80px -25px var(--accent-glow);
+}
+.download-card .badge {
+  position: absolute;
+  top: 22px;
+  right: 22px;
+  background: rgba(89, 210, 142, 0.15);
+  color: var(--good);
+  border: 1px solid rgba(89, 210, 142, 0.35);
+  border-radius: 999px;
+  font-size: 11.5px;
+  letter-spacing: 0.05em;
+  padding: 4px 11px;
+  text-transform: uppercase;
+}
+.download-card .label {
+  font-size: 12.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.download-card .dl-title {
+  font-size: 24px;
+  letter-spacing: -0.01em;
+  margin-bottom: 4px;
+}
+.download-card .price {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 8px 0 22px;
+}
+.download-card .price small {
+  font-size: 13.5px;
+  font-weight: 400;
+  color: var(--muted);
+  margin-left: 6px;
+}
+
+.combined-features {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 26px;
+  padding: 22px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 22px;
+}
+@media (max-width: 620px) { .combined-features { grid-template-columns: 1fr; gap: 18px; } }
+.combined-title {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  margin-bottom: 10px;
+}
+.combined-features ul { list-style: none; margin: 0; }
+.combined-features li {
+  color: var(--muted);
+  padding: 4px 0 4px 22px;
+  position: relative;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.combined-features li::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 10px;
+  width: 13px; height: 13px;
+  background: var(--good);
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg viewBox='0 0 14 14' xmlns='http://www.w3.org/2000/svg'><path d='M2 7l3 3 7-7' stroke='black' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>") center/contain no-repeat;
+          mask: url("data:image/svg+xml;utf8,<svg viewBox='0 0 14 14' xmlns='http://www.w3.org/2000/svg'><path d='M2 7l3 3 7-7' stroke='black' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>") center/contain no-repeat;
+}
+
+.dl-btn {
+  width: 100%;
+  justify-content: center;
+  font-size: 16px;
+  padding: 15px 22px;
+}
+.dl-btn svg { width: 18px; height: 18px; }
+
+.dl-note {
+  margin: 14px 0 0;
+  font-size: 12.5px;
+  color: var(--muted-soft);
+  text-align: center;
+}
+
 /* ---------------- Features ---------------- */
 .features { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 22px; }
 @media (max-width: 720px) { .features { grid-template-columns: 1fr; } }

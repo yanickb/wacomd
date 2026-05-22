@@ -67,41 +67,48 @@
       projet t'aide, tu peux m'offrir un café plus bas.
     </p>
 
-    <div class="pricing" style="grid-template-columns: 1fr 1fr;">
+    <div class="download-card reveal">
+      <div class="badge">Tout inclus</div>
+      <div class="label">macOS 26 Tahoe · Apple Silicon + Intel</div>
+      <h3 class="dl-title">wacomd&nbsp;+&nbsp;Wacomd&nbsp;Config</h3>
+      <div class="price">Gratuit <small>· open source · MIT · signé Apple</small></div>
 
-      <div class="price-card reveal">
-        <div class="label">Driver</div>
-        <h3>Démon wacomd</h3>
-        <div class="price">Gratuit <small>· open source · MIT</small></div>
-        <ul>
-          <li>Stylet absolu + clic + clic droit</li>
-          <li>Pression 2048 niveaux (Photoshop, Procreate, Krita, Affinity, Clip Studio)</li>
-          <li>Détection automatique de la gomme</li>
-          <li>Tilt X / Y</li>
-          <li>Tactile&nbsp;: 1 doigt curseur, 2 doigts scroll, 3 doigts gestes système</li>
-          <li>Tap to click</li>
-          <li>Démon LaunchAgent avec reload SIGHUP</li>
-        </ul>
-        <a class="btn btn-primary" href="wacomd-latest.pkg" download>Télécharger&nbsp;.pkg</a>
+      <div class="combined-features">
+        <div>
+          <h4 class="combined-title">Démon (driver)</h4>
+          <ul>
+            <li>Stylet absolu + clic + clic droit</li>
+            <li>Pression 2048 niveaux (Photoshop, Procreate, Krita, Affinity, Clip Studio)</li>
+            <li>Détection automatique de la gomme</li>
+            <li>Tilt X / Y</li>
+            <li>Tactile&nbsp;: 1 doigt curseur, 2 doigts scroll, 3 doigts gestes système</li>
+            <li>LaunchAgent avec reload SIGHUP</li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="combined-title">App de réglages</h4>
+          <ul>
+            <li>Fenêtre native + barre de menus</li>
+            <li>Sliders sensibilités curseur / scroll / 3 doigts / tap</li>
+            <li>Toggles 1 / 2 / 3 doigts + tap-to-click + scroll naturel</li>
+            <li>Master switch tactile (utile en dessin)</li>
+            <li>Rebinding des gestes 3 doigts</li>
+            <li>Reload à chaud du démon (pas de logout)</li>
+          </ul>
+        </div>
       </div>
 
-      <div class="price-card featured reveal">
-        <div class="badge">App</div>
-        <div class="label">Interface native macOS</div>
-        <h3>Wacomd&nbsp;Config</h3>
-        <div class="price">Gratuit <small>· incluse dans le&nbsp;.pkg</small></div>
-        <ul>
-          <li>Fenêtre native + barre de menus</li>
-          <li>Sliders sensibilités curseur / scroll / 3 doigts / tap</li>
-          <li>Toggles 1 / 2 / 3 doigts + tap to click + scroll naturel</li>
-          <li>Master switch tactile (utile en dessin)</li>
-          <li>Rebinding des gestes 3 doigts (Mission Control / Spaces / etc.)</li>
-          <li>Reload à chaud du démon (pas de logout)</li>
-          <li>Signée Developer ID + notarisée</li>
-        </ul>
-        <a class="btn btn-ghost" href="wacomd-latest.pkg" download>Même téléchargement</a>
-      </div>
-
+      <a class="btn btn-primary dl-btn" href="wacomd-latest.pkg" download>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        Télécharger&nbsp;wacomd-latest.pkg
+      </a>
+      <p class="dl-note">
+        Build signée Developer ID + notarisée Apple — aucun avertissement Gatekeeper.
+      </p>
     </div>
   </section>
 

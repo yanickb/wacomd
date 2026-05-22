@@ -67,41 +67,48 @@
       you can buy me a coffee further down the page.
     </p>
 
-    <div class="pricing" style="grid-template-columns: 1fr 1fr;">
+    <div class="download-card reveal">
+      <div class="badge">Everything included</div>
+      <div class="label">macOS 26 Tahoe · Apple Silicon + Intel</div>
+      <h3 class="dl-title">wacomd&nbsp;+&nbsp;Wacomd&nbsp;Config</h3>
+      <div class="price">Free <small>· open source · MIT · Apple-signed</small></div>
 
-      <div class="price-card reveal">
-        <div class="label">Driver</div>
-        <h3>wacomd daemon</h3>
-        <div class="price">Free <small>· open source · MIT</small></div>
-        <ul>
-          <li>Absolute pen + left click + right click</li>
-          <li>2048-level pressure (Photoshop, Procreate, Krita, Affinity, Clip Studio)</li>
-          <li>Automatic eraser detection</li>
-          <li>Tilt X / Y</li>
-          <li>Touch: 1-finger cursor, 2-finger scroll, 3-finger system gestures</li>
-          <li>Tap to click</li>
-          <li>LaunchAgent daemon with SIGHUP hot-reload</li>
-        </ul>
-        <a class="btn btn-primary" href="wacomd-latest.pkg" download>Download&nbsp;.pkg</a>
+      <div class="combined-features">
+        <div>
+          <h4 class="combined-title">Daemon (driver)</h4>
+          <ul>
+            <li>Absolute pen + left click + right click</li>
+            <li>2048-level pressure (Photoshop, Procreate, Krita, Affinity, Clip Studio)</li>
+            <li>Automatic eraser detection</li>
+            <li>Tilt X / Y</li>
+            <li>Touch: 1-finger cursor, 2-finger scroll, 3-finger system gestures</li>
+            <li>LaunchAgent with SIGHUP hot-reload</li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="combined-title">Configurator app</h4>
+          <ul>
+            <li>Native window + menu-bar entry</li>
+            <li>Sliders for cursor / scroll / 3-finger / tap sensitivities</li>
+            <li>Toggles for 1 / 2 / 3-finger + tap-to-click + natural scroll</li>
+            <li>Master touch switch (handy when drawing)</li>
+            <li>Rebind 3-finger gestures</li>
+            <li>Hot-reload the daemon (no logout needed)</li>
+          </ul>
+        </div>
       </div>
 
-      <div class="price-card featured reveal">
-        <div class="badge">App</div>
-        <div class="label">Native macOS UI</div>
-        <h3>Wacomd&nbsp;Config</h3>
-        <div class="price">Free <small>· bundled in the .pkg</small></div>
-        <ul>
-          <li>Native window + menu-bar entry</li>
-          <li>Sliders for cursor / scroll / 3-finger / tap sensitivities</li>
-          <li>Toggles for 1 / 2 / 3-finger + tap-to-click + natural scroll</li>
-          <li>Master touch switch (handy when drawing)</li>
-          <li>Rebind 3-finger gestures (Mission Control / Spaces / etc.)</li>
-          <li>Hot-reload the daemon (no logout needed)</li>
-          <li>Developer ID signed + Apple notarised</li>
-        </ul>
-        <a class="btn btn-ghost" href="wacomd-latest.pkg" download>Same download</a>
-      </div>
-
+      <a class="btn btn-primary dl-btn" href="wacomd-latest.pkg" download>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        Download&nbsp;wacomd-latest.pkg
+      </a>
+      <p class="dl-note">
+        Developer ID signed + Apple-notarised build — zero Gatekeeper warning.
+      </p>
     </div>
   </section>
 
