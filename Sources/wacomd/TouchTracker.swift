@@ -1,66 +1,141 @@
 import Foundation
+import AppKit
 
-/// Maintains frame-to-frame state of the multi-touch surface and turns
-/// 2-finger drags into scroll events.
+/// Per-finger state we maintain across HID frames.
+private struct ActiveTouch {
+    let slotID: Int
+    let startTime: CFAbsoluteTime
+    let startScreenPoint: CGPoint
+    var lastScreenPoint: CGPoint
+    var maxDistanceFromStart: Double
+}
+
+/// Translates the multi-touch surface into:
+///   - 1 finger → cursor moves (absolute mapping)
+///   - 1-finger quick tap → left-click at the touch start position
+///   - 2 fingers → 2-axis scroll (centroid delta)
+///   - 3+ fingers → ignored
 final class TouchTracker {
     private let injector: EventInjector
-    private var lastCentroidA: Double?
-    private var lastCentroidB: Double?
+    private var touches: [Int: ActiveTouch] = [:]
+    private var lastScrollCentroidScreen: CGPoint?
 
-    /// Scroll sensitivity. Touch position bytes span roughly 0..65535 across
-    /// the surface. A full-tablet swipe should scroll ~600 pixels (one big
-    /// page), so scale = 600/30000 ≈ 0.02.
-    private let scrollScale: Double = 0.02
+    /// Tap recognised if : duration < `tapMaxDuration` AND
+    /// max displacement during contact < `tapMaxMovementPx`.
+    private let tapMaxDuration: CFAbsoluteTime = 0.20
+    private let tapMaxMovementPx: Double = 10
 
-    /// Dead zone in raw position units to dampen jitter.
-    private let deadZone: Double = 8
-
-    /// Per-event cap (scroll pixels) — prevents extreme jumps when the
-    /// finger ID set changes between two consecutive frames.
-    private let maxPerEvent: Double = 80
+    /// Sensitivity for 2-finger scroll, expressed in screen-pixels of
+    /// scroll per screen-pixel of finger movement.
+    private let scrollScale: Double = 1.0
+    private let scrollDeadZone: Double = 1.0
+    private let scrollMaxPerEvent: Double = 80
 
     init(injector: EventInjector) {
         self.injector = injector
     }
 
+    // MARK: - Frame handler
+
     func handleFrame(contacts: [TouchContact]) {
-        // We only act on exactly two fingers in contact. 1-finger gestures
-        // are reserved for the pen ; 3+ fingers are out of scope (would
-        // need private SPI).
-        guard contacts.count == 2 else {
-            lastCentroidA = nil
-            lastCentroidB = nil
-            return
+        let now = CFAbsoluteTimeGetCurrent()
+
+        let activeIDs = Set(contacts.filter { $0.inContact }.map { $0.slotID })
+        let previousIDs = Set(touches.keys)
+        let appearedIDs = activeIDs.subtracting(previousIDs)
+        let releasedIDs = previousIDs.subtracting(activeIDs)
+
+        // Register newly-arrived contacts
+        for id in appearedIDs {
+            guard let contact = contacts.first(where: { $0.slotID == id && $0.inContact }) else { continue }
+            let p = mapToScreen(touch: contact)
+            touches[id] = ActiveTouch(
+                slotID: id,
+                startTime: now,
+                startScreenPoint: p,
+                lastScreenPoint: p,
+                maxDistanceFromStart: 0
+            )
         }
 
-        let centroidA = Double(contacts[0].positionA + contacts[1].positionA) / 2.0
-        let centroidB = Double(contacts[0].positionB + contacts[1].positionB) / 2.0
-
-        defer {
-            lastCentroidA = centroidA
-            lastCentroidB = centroidB
+        // Update positions for still-present contacts
+        for contact in contacts where contact.inContact {
+            guard var touch = touches[contact.slotID] else { continue }
+            let p = mapToScreen(touch: contact)
+            let d = hypot(p.x - touch.startScreenPoint.x, p.y - touch.startScreenPoint.y)
+            touch.lastScreenPoint = p
+            touch.maxDistanceFromStart = max(touch.maxDistanceFromStart, Double(d))
+            touches[contact.slotID] = touch
         }
 
-        guard let prevA = lastCentroidA, let prevB = lastCentroidB else { return }
+        // Process releases (and tap detection)
+        for id in releasedIDs {
+            guard let touch = touches.removeValue(forKey: id) else { continue }
+            let duration = now - touch.startTime
+            let wasTap = duration <= tapMaxDuration
+                      && touch.maxDistanceFromStart <= tapMaxMovementPx
+                      && previousIDs.count == 1  // only count single-finger taps
+            if wasTap {
+                Verbose.log(String(format: "tap detected @ (%.0f, %.0f) duration=%.0fms",
+                                   touch.startScreenPoint.x,
+                                   touch.startScreenPoint.y,
+                                   duration * 1000))
+                injector.tapClick(at: touch.startScreenPoint)
+            }
+        }
 
-        let deltaA = centroidA - prevA
-        let deltaB = centroidB - prevB
+        // Continuous behaviour based on the current finger count
+        switch touches.count {
+        case 0:
+            lastScrollCentroidScreen = nil
+        case 1:
+            // 1-finger : drive the cursor in absolute mapping
+            if let touch = touches.values.first {
+                injector.moveCursor(to: touch.lastScreenPoint)
+            }
+            lastScrollCentroidScreen = nil
+        case 2:
+            // 2-finger : scroll
+            handleTwoFingerScroll()
+        default:
+            // 3+ fingers : ignore (would need private SPI for gestures)
+            lastScrollCentroidScreen = nil
+        }
+    }
 
-        if abs(deltaA) < deadZone && abs(deltaB) < deadZone { return }
+    // MARK: - 2-finger scroll
 
-        // The position bytes don't have a documented X/Y mapping yet, so we
-        // assume positionA correlates with one axis and positionB with the
-        // other. On the PTH-451 over USB, empirically deltaB tracks the
-        // "long axis" of the tablet (= horizontal in default orientation,
-        // = scroll Y for the user).
-        //
-        // The signs are flipped so that fingers moving "down/right" produce
-        // the natural macOS scroll direction (the OS handles the user's
-        // "natural scrolling" preference on top).
-        let rawScrollY = -deltaB * scrollScale
-        let rawScrollX = -deltaA * scrollScale
-        let scrollY = max(-maxPerEvent, min(maxPerEvent, rawScrollY))
-        let scrollX = max(-maxPerEvent, min(maxPerEvent, rawScrollX))
+    private func handleTwoFingerScroll() {
+        let fingers = Array(touches.values)
+        guard fingers.count == 2 else { return }
+        let cx = (fingers[0].lastScreenPoint.x + fingers[1].lastScreenPoint.x) / 2
+        let cy = (fingers[0].lastScreenPoint.y + fingers[1].lastScreenPoint.y) / 2
+        let centroid = CGPoint(x: cx, y: cy)
+        defer { lastScrollCentroidScreen = centroid }
+
+        guard let prev = lastScrollCentroidScreen else { return }
+        let dx = centroid.x - prev.x
+        let dy = centroid.y - prev.y
+        if abs(dx) < scrollDeadZone && abs(dy) < scrollDeadZone { return }
+
+        let scrollY = clamp(-Double(dy) * scrollScale, -scrollMaxPerEvent, scrollMaxPerEvent)
+        let scrollX = clamp(-Double(dx) * scrollScale, -scrollMaxPerEvent, scrollMaxPerEvent)
         injector.scroll(dx: scrollX, dy: scrollY)
+    }
+
+    // MARK: - Coordinate mapping
+
+    /// Map touch surface coordinates (12-bit packed) onto the primary screen.
+    private func mapToScreen(touch: TouchContact) -> CGPoint {
+        let normX = Double(touch.x) / Double(maxTouchAxis)
+        let normY = Double(touch.y) / Double(maxTouchAxis)
+        let primary = NSScreen.screens.first ?? NSScreen.main
+        let w = primary?.frame.width  ?? 1920
+        let h = primary?.frame.height ?? 1080
+        return CGPoint(x: normX * w, y: normY * h)
+    }
+
+    private func clamp(_ v: Double, _ lo: Double, _ hi: Double) -> Double {
+        min(max(v, lo), hi)
     }
 }

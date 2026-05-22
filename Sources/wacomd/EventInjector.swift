@@ -236,6 +236,42 @@ final class EventInjector {
         }
     }
 
+    // MARK: - Cursor / click from the multi-touch surface
+
+    /// Move the cursor to an absolute screen position. Used by the 1-finger
+    /// touch handler. Doesn't carry any tablet payload (apps that care
+    /// about pen-vs-touch can distinguish via NSEvent subtype).
+    func moveCursor(to point: CGPoint) {
+        guard let evt = CGEvent(
+            mouseEventSource: nil,
+            mouseType: .mouseMoved,
+            mouseCursorPosition: point,
+            mouseButton: .left
+        ) else { return }
+        evt.post(tap: .cghidEventTap)
+    }
+
+    /// Post a quick left mouse down + up at `point` — a tap-to-click from
+    /// the multi-touch surface.
+    func tapClick(at point: CGPoint) {
+        guard let down = CGEvent(
+            mouseEventSource: nil,
+            mouseType: .leftMouseDown,
+            mouseCursorPosition: point,
+            mouseButton: .left
+        ),
+        let up = CGEvent(
+            mouseEventSource: nil,
+            mouseType: .leftMouseUp,
+            mouseCursorPosition: point,
+            mouseButton: .left
+        ) else { return }
+        down.setIntegerValueField(.mouseEventClickState, value: 1)
+        up.setIntegerValueField(.mouseEventClickState, value: 1)
+        down.post(tap: .cghidEventTap)
+        up.post(tap: .cghidEventTap)
+    }
+
     // MARK: - Scroll wheel (2-finger touch)
 
     /// Posts a pixel-precise scroll event. `dx` / `dy` are in OS scroll units

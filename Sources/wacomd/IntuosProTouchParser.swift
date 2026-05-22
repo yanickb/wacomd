@@ -4,12 +4,14 @@ import Foundation
 struct TouchContact: Equatable {
     let slotID: Int
     let inContact: Bool
-    /// Opaque 32-bit position derived from the 4 position bytes of the
-    /// slot. The exact X/Y semantics aren't documented but stay consistent
-    /// frame-to-frame, which is all we need for delta-based scroll.
-    let positionA: Int   // bytes [+1..+2] interpreted as 16-bit big-endian
-    let positionB: Int   // bytes [+3..+4] interpreted as 16-bit big-endian
+    /// Absolute X / Y on the touch surface, in raw 12-bit units
+    /// (0..maxTouchAxis ≈ 4095).
+    let x: Int
+    let y: Int
 }
+
+/// Logical max of the 12-bit packed touch coordinates.
+let maxTouchAxis: Int = 4095
 
 /// Decoder for the multi-touch reports of the Wacom Intuos Pro family.
 ///
@@ -71,14 +73,21 @@ enum IntuosProTouchParser {
             let ghosted = (slotID & 0x80) != 0
             if pressureByte == 0 || ghosted { continue }
 
-            let positionA = (Int(data[off + 1]) << 8) | Int(data[off + 2])
-            let positionB = (Int(data[off + 3]) << 8) | Int(data[off + 4])
+            // 12-bit X/Y packed across 3 bytes (Intuos5 touch layout) :
+            //   X = (b[1] << 4)  | (b[2] >> 4)
+            //   Y = ((b[2] & 0x0f) << 8) | b[3]
+            // Max ≈ 4095 on each axis.
+            let b1 = Int(data[off + 1])
+            let b2 = Int(data[off + 2])
+            let b3 = Int(data[off + 3])
+            let x = (b1 << 4) | (b2 >> 4)
+            let y = ((b2 & 0x0f) << 8) | b3
 
             contacts.append(TouchContact(
                 slotID: slotID,
                 inContact: true,
-                positionA: positionA,
-                positionB: positionB
+                x: x,
+                y: y
             ))
         }
         return contacts
