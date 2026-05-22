@@ -13,6 +13,18 @@ moves / clicks / pressure into the event tap. Same approach as
 
 🇫🇷 Une version française du README est disponible : [README.fr.md](README.fr.md).
 
+## ⚠️ Scope — what this driver does NOT do
+
+**This is a pen-only driver.** It handles pen movement, clicks and pressure,
+and that's it. The following are **not implemented yet** :
+
+- ❌ The 6 **ExpressKeys** (the pad buttons on the side of the tablet)
+- ❌ The **Touch Ring** (the wheel)
+- ❌ The **multi-touch surface** (finger gestures on the tablet)
+
+If your workflow depends on any of those, this driver is not enough for you
+yet. They're all on the roadmap — see [Roadmap](#roadmap).
+
 ## Status — v0.2 (tested live on macOS 26.3, Apple Silicon)
 
 | Feature                                          | Status |
