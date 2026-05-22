@@ -51,9 +51,20 @@ enum IntuosProTouchParser {
     static func decode(data: UnsafeMutablePointer<UInt8>, length: Int) -> [TouchContact] {
         guard length >= headerBytes + bytesPerSlot else { return [] }
 
+        // Status byte indicates approximate number of contacts :
+        //   0x01 + data[2] == 0x81 : idle keepalive, no finger
+        //   0x01 + data[2] != 0x81 : 1 finger active
+        //   0x02                   : 2 fingers
+        //   0x03                   : 3 fingers
+        // In all "active" cases the per-slot layout below is identical,
+        // so we just need to make sure we don't decode the idle keepalive.
         let status = data[1]
-        // Only status 0x02 carries multi-touch finger data on this firmware.
-        guard status == 0x02 else { return [] }
+        let secondByte = data[2]
+        let isIdleKeepalive = (status == 0x01 && secondByte == 0x81)
+        if isIdleKeepalive { return [] }
+        if status == 0x00 { return [] }
+        // Status >= 0x80 are pen-interface heartbeats we don't care about.
+        if status >= 0x80 { return [] }
 
         var contacts: [TouchContact] = []
         for slot in 0..<maxSlots {

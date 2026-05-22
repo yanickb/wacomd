@@ -25,11 +25,12 @@ final class TouchTracker {
     private let tapMaxDuration: CFAbsoluteTime = 0.20
     private let tapMaxMovementPx: Double = 10
 
-    /// Sensitivity for 2-finger scroll, expressed in screen-pixels of
-    /// scroll per screen-pixel of finger movement.
-    private let scrollScale: Double = 1.0
+    /// Sensitivity for 2-finger scroll, in scroll-pixels per screen-pixel of
+    /// finger movement. ~0.3 matches the feel of a MacBook trackpad swipe :
+    /// a full-tablet finger swipe scrolls roughly one page.
+    private let scrollScale: Double = 0.3
     private let scrollDeadZone: Double = 1.0
-    private let scrollMaxPerEvent: Double = 80
+    private let scrollMaxPerEvent: Double = 60
 
     init(injector: EventInjector) {
         self.injector = injector
