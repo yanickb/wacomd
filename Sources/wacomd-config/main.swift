@@ -1,9 +1,11 @@
 import SwiftUI
+import AppKit
 import WacomdShared
 
 @main
 struct WacomdConfigApp: App {
     @StateObject private var model = ConfigModel()
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
         MenuBarExtra("wacomd", systemImage: "pencil.tip.crop.circle") {
@@ -11,6 +13,15 @@ struct WacomdConfigApp: App {
                 .frame(width: 320)
         }
         .menuBarExtraStyle(.window)
+    }
+}
+
+/// Forces "accessory" activation policy so the app behaves as a menu-bar
+/// agent (no Dock icon, no main window) even when launched as a raw SPM
+/// binary without a .app bundle / Info.plist.
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.setActivationPolicy(.accessory)
     }
 }
 
