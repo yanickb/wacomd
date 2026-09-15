@@ -1,11 +1,17 @@
 import Foundation
+import AppKit
 import WacomdShared
 
 setbuf(stdout, nil)
 
+// The HUD and the radial menu are AppKit panels : run as an accessory app
+// (no Dock icon, no menu bar) instead of a bare run loop.
+let application = NSApplication.shared
+application.setActivationPolicy(.accessory)
+
 print("""
 [wacomd] Démon de pilote Wacom pour macOS — version 0.7.0
-[wacomd] Modèle supporté actuellement: Intuos Pro Small (PTH-451)
+[wacomd] Modèles supportés: Intuos Pro Small (PTH-451), Intuos S 2 (CTL-490)
 [wacomd] Stylet + pression + 1/2/3-doigts. Config: \(WacomdConfig.defaultPath.path)
 """)
 
@@ -68,4 +74,4 @@ sources.append(hupSource)
 _ = sources
 
 print("[wacomd] En attente d'une tablette… (Ctrl+C pour quitter)")
-RunLoop.current.run()
+application.run()

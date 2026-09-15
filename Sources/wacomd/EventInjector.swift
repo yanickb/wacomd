@@ -1,6 +1,7 @@
 import Foundation
 import CoreGraphics
 import AppKit
+import WacomdShared
 
 /// Capability mask attached to the tablet proximity event. Tells apps which
 /// of the tablet point fields actually carry meaningful data.
@@ -33,7 +34,55 @@ private enum TabletPointerType: Int64 {
 
 final class EventInjector {
     private var lastTipDown: Bool = false
-    private var lastBarrel: Bool = false
+    private var lastLowerButton: Bool = false
+    private var lastUpperButton: Bool = false
+    private var lastPoint: CGPoint = .zero
+    /// Last pen sample in range, so button clicks carry tablet data.
+    private var lastState = PenState()
+    private var lastModel: WacomModel?
+    /// Mouse buttons currently held by a button action (count per button, in
+    /// case both pen buttons are bound to the same click).
+    private var heldMouseButtons: [CGMouseButton: Int] = [:]
+    /// Chords pressed by a button action, keyed by button id, so the key-up
+    /// matches the key-down even if the config is reloaded in between.
+    private var heldChords: [String: KeyChord] = [:]
+    /// Modifiers held by button actions (`"alt"`, `"shift+middleClick"`…),
+    /// keyed by button id. Their union is added to every posted event.
+    private var heldModifiers: [String: CGEventFlags] = [:]
+    /// Mouse button of a `modifiers+click` shortcut currently held, by button id.
+    private var heldModifiedClicks: [String: CGMouseButton] = [:]
+
+    private lazy var gestures = ButtonGestures { [unowned self] action, id, pressed in
+        self.perform(action, id: id, pressed: pressed)
+    }
+
+    // Modes driven by held buttons. Counters, since two buttons may share one.
+    private var layerHeld = 0
+    private var layer2Active: Bool { layerHeld > 0 }
+    /// Actions latched on by a `.toggle` press, by raw value.
+    private var toggledActions: Set<String> = []
+    private var precisionHeld = 0
+    /// Cursor and absolute pen position when precision mode started.
+    private var precisionAnchor: (screen: CGPoint, pen: CGPoint)?
+    private var brushSizeHeld = 0
+    /// Pen X (screen px) at which the next brush-size step is measured.
+    private var brushAnchorX: CGFloat?
+    private var eraserHeld = 0
+    private var scrollHeld = 0
+    /// Previous absolute pen position while scrolling, and sub-pixel leftovers.
+    private var scrollAnchor: CGPoint?
+    private var scrollRemainder = CGPoint.zero
+    /// Radial menu open state : its items, centre, pen anchor and pointed item.
+    private var radialItems: [RadialItem] = []
+    private var radialHeld = 0
+    private var radialCenter: CGPoint = .zero
+    private var radialAnchor: CGPoint?
+    private var radialSelection: Int?
+    /// Cursor position kept still while a mode reinterprets pen motion
+    /// (brush size, scroll, radial menu).
+    private var frozenPoint: CGPoint?
+
+    private var cachedDisplay: (index: Int, bounds: CGRect, at: CFAbsoluteTime)?
     private var lastInRange: Bool = false
     private var lastPosted: CFAbsoluteTime = 0
     private var postedCount: Int = 0
@@ -60,15 +109,21 @@ final class EventInjector {
     /// 240 Hz is plenty: the PTH-451 reports at ~200 Hz.
     private let throttleInterval: CFAbsoluteTime = 1.0 / 240.0
 
+    private var cursorFrozen: Bool { brushSizeHeld > 0 || scrollHeld > 0 || radialHeld > 0 }
+    private var heldModifierFlags: CGEventFlags {
+        heldModifiers.values.reduce(into: CGEventFlags()) { $0.formUnion($1) }
+    }
+
     // MARK: - Public API
 
     func update(state: PenState, model: WacomModel) {
         // ---- Proximity LEAVE ---------------------------------------------
         if !state.inRange {
             if lastTipDown {
-                postMouseEvent(type: .leftMouseUp, at: .zero, state: state, model: model)
+                postMouseEvent(type: .leftMouseUp, at: lastPoint, state: state, model: model)
                 lastTipDown = false
             }
+            releasePenButtons()
             if lastInRange {
                 postProximityEvent(entering: false, model: model)
                 lastInRange = false
@@ -77,25 +132,30 @@ final class EventInjector {
         }
 
         // ---- Proximity ENTER ---------------------------------------------
-        let desiredPointerType: TabletPointerType = state.eraser ? .eraser : .pen
+        // An `.eraser` button makes apps see the eraser end of the pen.
+        let desiredPointerType: TabletPointerType = (state.eraser || eraserHeld > 0) ? .eraser : .pen
         if !lastInRange {
             currentPointerType = desiredPointerType
             postProximityEvent(entering: true, model: model)
             lastInRange = true
         } else if desiredPointerType != currentPointerType {
-            // Le stylet a été retourné en proximité : on cycle
-            // proximityLeave + proximityEnter pour que les apps
-            // (Photoshop, Procreate…) basculent leur outil entre
-            // crayon et gomme correctement.
+            // Le stylet a été retourné en proximité (ou une touche gomme
+            // change d'état) : on cycle proximityLeave + proximityEnter pour
+            // que les apps (Photoshop, Procreate…) basculent leur outil
+            // entre crayon et gomme correctement.
             postProximityEvent(entering: false, model: model)
             currentPointerType = desiredPointerType
             postProximityEvent(entering: true, model: model)
         }
 
-        let cgPoint = mapToScreen(state: state, model: model)
+        let cgPoint = applyModes(to: mapToScreen(state: state, model: model))
+        lastPoint = cgPoint
+        lastState = state
+        lastModel = model
 
         // ---- Decide mouse-event type ------------------------------------
         let eventType: CGEventType
+        var eventButton: CGMouseButton = .left
         if state.tipDown && !lastTipDown {
             eventType = .leftMouseDown
         } else if !state.tipDown && lastTipDown {
@@ -106,19 +166,282 @@ final class EventInjector {
             let now = CFAbsoluteTimeGetCurrent()
             if now - lastPosted < throttleInterval { return }
             lastPosted = now
-            eventType = .mouseMoved
+            // A button held as right/middle click turns hover into a drag
+            // (Blender orbit on middle-drag, context-menu drag on right).
+            if heldMouseButtons[.right, default: 0] > 0 {
+                eventType = .rightMouseDragged
+                eventButton = .right
+            } else if heldMouseButtons[.center, default: 0] > 0 {
+                eventType = .otherMouseDragged
+                eventButton = .center
+            } else {
+                eventType = .mouseMoved
+            }
         }
 
-        postMouseEvent(type: eventType, at: cgPoint, state: state, model: model)
+        // Modes that reinterpret pen motion keep the cursor still.
+        if !(cursorFrozen && eventType == .mouseMoved) {
+            postMouseEvent(type: eventType, at: cgPoint, state: state, model: model, button: eventButton)
+        }
 
-        // Barrel button → right click, posted as a separate transition.
-        if state.barrelButton != lastBarrel {
-            let rightType: CGEventType = state.barrelButton ? .rightMouseDown : .rightMouseUp
-            postMouseEvent(type: rightType, at: cgPoint, state: state, model: model, button: .right)
+        // Side buttons → configurable actions, posted as separate transitions.
+        if state.lowerButton != lastLowerButton {
+            lastLowerButton = state.lowerButton
+            buttonChanged(.penLower, pressed: state.lowerButton)
+        }
+        if state.upperButton != lastUpperButton {
+            lastUpperButton = state.upperButton
+            buttonChanged(.penUpper, pressed: state.upperButton)
         }
 
         lastTipDown = state.tipDown
-        lastBarrel = state.barrelButton
+    }
+
+    private func releasePenButtons() {
+        if lastLowerButton {
+            lastLowerButton = false
+            buttonChanged(.penLower, pressed: false)
+        }
+        if lastUpperButton {
+            lastUpperButton = false
+            buttonChanged(.penUpper, pressed: false)
+        }
+    }
+
+    /// Applies the held modes to the absolute pen position.
+    private func applyModes(to absolute: CGPoint) -> CGPoint {
+        let config = ConfigStore.shared.current
+        if cursorFrozen {
+            let frozen = frozenPoint ?? currentCursorPosition()
+            frozenPoint = frozen
+
+            if radialHeld > 0 {
+                // Point at an item by moving the pen away from where it started.
+                let anchor = radialAnchor ?? absolute
+                radialAnchor = anchor
+                radialSelection = RadialMenuView.sector(dx: absolute.x - anchor.x, dy: absolute.y - anchor.y,
+                                                        count: radialItems.count)
+                Hud.shared.highlightRadial(radialSelection)
+            } else if brushSizeHeld > 0 {
+                // Horizontal travel taps the brush-size keys.
+                let step = CGFloat(max(config.brushSizeStep, 2))
+                var anchor = brushAnchorX ?? absolute.x
+                while abs(absolute.x - anchor) >= step {
+                    let growing = absolute.x > anchor
+                    tapShortcut(growing ? config.brushSizeIncrease : config.brushSizeDecrease)
+                    anchor += growing ? step : -step
+                }
+                brushAnchorX = anchor
+            } else if scrollHeld > 0 {
+                // Pen motion drags the content : down moves it down.
+                if let previous = scrollAnchor {
+                    let speed = CGFloat(clamp(config.scrollSpeed, 0.1, 10))
+                    let dx = (absolute.x - previous.x) * speed + scrollRemainder.x
+                    let dy = (absolute.y - previous.y) * speed + scrollRemainder.y
+                    scrollRemainder = CGPoint(x: dx - dx.rounded(), y: dy - dy.rounded())
+                    scroll(dx: Double(dx.rounded()), dy: Double(dy.rounded()))
+                }
+                scrollAnchor = absolute
+            }
+            return frozen
+        }
+        if precisionHeld > 0 {
+            let anchor = precisionAnchor ?? (screen: currentCursorPosition(), pen: absolute)
+            precisionAnchor = anchor
+            let scale = CGFloat(clamp(config.precisionScale, 0.02, 1))
+            return CGPoint(x: anchor.screen.x + (absolute.x - anchor.pen.x) * scale,
+                           y: anchor.screen.y + (absolute.y - anchor.pen.y) * scale)
+        }
+        return absolute
+    }
+
+    private func tapShortcut(_ spec: String) {
+        guard case .key(let chord)? = KeyShortcut.parse(spec) else {
+            FileHandle.standardError.write(Data("[wacomd] Touche invalide : \"\(spec)\"\n".utf8))
+            return
+        }
+        postKey(chord, down: true)
+        postKey(chord, down: false)
+    }
+
+    // MARK: - Button actions (pen side buttons + pad ExpressKeys)
+
+    /// Entry point for a physical button transition. The binding is resolved
+    /// on press from the frontmost app's profile and the current layer, then
+    /// press / double / long presses are told apart by `ButtonGestures`.
+    func buttonChanged(_ button: PhysicalButton, pressed: Bool) {
+        let config = ConfigStore.shared.current
+        gestures.changed(id: button.id, pressed: pressed,
+                         doubleTap: Double(max(config.doubleTapMs, 80)) / 1000,
+                         longPress: Double(max(config.longPressMs, 150)) / 1000) {
+            self.currentButtonMap(config).binding(for: button, layer2: self.layer2Active)
+        }
+    }
+
+    private func currentButtonMap(_ config: WacomdConfig) -> ButtonMap {
+        let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        let map = config.buttonMap(forApp: bundleID)
+        Verbose.log("app au premier plan : \(bundleID ?? "?")\(map == config.buttons ? " (profil par défaut)" : "")")
+        return map
+    }
+
+    /// Press or release an action. `id` identifies the physical button so a
+    /// held chord or modifier is released exactly as it was pressed.
+    private func perform(_ action: ButtonAction, id: String, pressed: Bool) {
+        Verbose.log("bouton \(id) \(pressed ? "appuyé" : "relâché") → \(action.rawValue)")
+        let delta = pressed ? 1 : -1
+        switch action {
+        case .none:
+            return
+        case .layer:
+            layerHeld = max(0, layerHeld + delta)
+            Hud.shared.setMode(ButtonAction.layer.displayName, active: layer2Active)
+        case .toggle(let inner):
+            // Each press flips the latched action ; releases are ignored.
+            guard pressed else { return }
+            let key = inner.rawValue
+            let turningOn = !toggledActions.contains(key)
+            if turningOn { toggledActions.insert(key) } else { toggledActions.remove(key) }
+            perform(inner, id: "toggle.\(key)", pressed: turningOn)
+        case .precision:
+            precisionHeld = max(0, precisionHeld + delta)
+            precisionAnchor = nil
+            Hud.shared.setMode(action.displayName, active: precisionHeld > 0)
+        case .brushSize:
+            brushSizeHeld = max(0, brushSizeHeld + delta)
+            brushAnchorX = nil
+            modeFreezeChanged()
+            Hud.shared.setMode("Taille pinceau ↔", active: brushSizeHeld > 0)
+        case .scroll:
+            scrollHeld = max(0, scrollHeld + delta)
+            scrollAnchor = nil
+            scrollRemainder = .zero
+            modeFreezeChanged()
+            Hud.shared.setMode(action.displayName, active: scrollHeld > 0)
+        case .eraser:
+            eraserHeld = max(0, eraserHeld + delta)
+            Hud.shared.setMode(action.displayName, active: eraserHeld > 0)
+        case .radialMenu:
+            radialMenuChanged(pressed: pressed)
+        case .leftClick:
+            click(.left, pressed: pressed)
+        case .rightClick:
+            click(.right, pressed: pressed)
+        case .middleClick:
+            click(.center, pressed: pressed)
+        case .shortcut(let spec):
+            shortcut(spec, id: id, pressed: pressed)
+        }
+    }
+
+    private func modeFreezeChanged() {
+        if !cursorFrozen { frozenPoint = nil }
+    }
+
+    private func radialMenuChanged(pressed: Bool) {
+        if pressed {
+            radialHeld += 1
+            guard radialHeld == 1 else { return }
+            let config = ConfigStore.shared.current
+            radialItems = Array(currentButtonMap(config).radialMenu.filter { $0.action != .none }.prefix(8))
+            radialAnchor = nil
+            radialSelection = nil
+            frozenPoint = currentCursorPosition()
+            radialCenter = frozenPoint ?? .zero
+            Hud.shared.showRadial(titles: radialItems.map(\.title), at: radialCenter)
+        } else {
+            guard radialHeld > 0 else { return }
+            radialHeld -= 1
+            guard radialHeld == 0 else { return }
+            Hud.shared.hideRadial()
+            modeFreezeChanged()
+            if let index = radialSelection, radialItems.indices.contains(index) {
+                let item = radialItems[index]
+                Hud.shared.flash(item.title)
+                perform(item.action, id: "radial", pressed: true)
+                perform(item.action, id: "radial", pressed: false)
+            }
+            radialSelection = nil
+        }
+    }
+
+    private func shortcut(_ spec: String, id: String, pressed: Bool) {
+        if !pressed {
+            if let chord = heldChords.removeValue(forKey: id) {
+                postKey(chord, down: false)
+            }
+            if let button = heldModifiedClicks.removeValue(forKey: id) {
+                click(button, pressed: false)
+            }
+            if heldModifiers[id] != nil {
+                setModifiers(nil, for: id)
+            }
+            return
+        }
+
+        switch KeyShortcut.parse(spec) {
+        case .key(let chord)?:
+            heldChords[id] = chord
+            postKey(chord, down: true)
+            Hud.shared.flash(ButtonAction.prettyShortcut(spec))
+        case .modifiers(let flags)?:
+            setModifiers(flags, for: id)
+        case .click(let button, let flags)?:
+            setModifiers(flags, for: id)
+            heldModifiedClicks[id] = button
+            click(button, pressed: true)
+        case nil:
+            FileHandle.standardError.write(Data("[wacomd] Raccourci invalide pour \(id) : \"\(spec)\"\n".utf8))
+        }
+    }
+
+    /// Holds (or releases, with nil) modifiers for a button, posting the
+    /// modifier key transitions apps listen to (flagsChanged).
+    private func setModifiers(_ flags: CGEventFlags?, for id: String) {
+        let own = flags ?? heldModifiers[id] ?? []
+        let before = heldModifierFlags
+        heldModifiers[id] = flags
+        let after = heldModifierFlags
+        for (flag, keyCode) in KeyShortcut.modifierKeyCodes where before.contains(flag) != after.contains(flag) {
+            guard let evt = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: after.contains(flag)) else { continue }
+            evt.flags = after
+            evt.post(tap: .cghidEventTap)
+        }
+        let names = [(CGEventFlags.maskControl, "⌃"), (.maskAlternate, "⌥"), (.maskShift, "⇧"), (.maskCommand, "⌘")]
+        let label = names.filter { own.contains($0.0) }.map(\.1).joined()
+        if !label.isEmpty { Hud.shared.setMode(label, active: flags != nil) }
+    }
+
+    private func postKey(_ chord: KeyChord, down: Bool) {
+        guard let evt = CGEvent(keyboardEventSource: nil, virtualKey: chord.keyCode, keyDown: down) else { return }
+        evt.flags = chord.flags.union(heldModifierFlags)
+        evt.post(tap: .cghidEventTap)
+    }
+
+    private func click(_ button: CGMouseButton, pressed: Bool) {
+        let count = heldMouseButtons[button, default: 0]
+        if pressed {
+            heldMouseButtons[button] = count + 1
+            guard count == 0 else { return }
+        } else {
+            guard count > 0 else { return }
+            heldMouseButtons[button] = count - 1
+            guard count == 1 else { return }
+        }
+        let type: CGEventType
+        switch button {
+        case .left:  type = pressed ? .leftMouseDown : .leftMouseUp
+        case .right: type = pressed ? .rightMouseDown : .rightMouseUp
+        default:     type = pressed ? .otherMouseDown : .otherMouseUp
+        }
+        if lastInRange, let model = lastModel {
+            postMouseEvent(type: type, at: lastPoint, state: lastState, model: model, button: button)
+        } else if let evt = CGEvent(mouseEventSource: nil, mouseType: type,
+                                    mouseCursorPosition: currentCursorPosition(), mouseButton: button) {
+            let flags = heldModifierFlags
+            if !flags.isEmpty { evt.flags = flags }
+            evt.post(tap: .cghidEventTap)
+        }
     }
 
     /// Called by `WacomDevice` when a proximity-enter packet is parsed, so
@@ -137,6 +460,9 @@ final class EventInjector {
         guard let evt = CGEvent(source: nil) else { return }
         evt.type = .tabletProximity
 
+        // Eraser tool IDs have a low nibble of 0xa (Grip Pen 0x802 → 0x80a).
+        let vendorPointerType = currentPointerType == .eraser ? (currentToolID & ~0xf) | 0xa : currentToolID
+
         evt.setIntegerValueField(.tabletProximityEventVendorID,
                                  value: Int64(model.vendorID))
         evt.setIntegerValueField(.tabletProximityEventTabletID,
@@ -147,7 +473,7 @@ final class EventInjector {
                                  value: deviceID)
         evt.setIntegerValueField(.tabletProximityEventSystemTabletID, value: 0)
         evt.setIntegerValueField(.tabletProximityEventVendorPointerType,
-                                 value: currentToolID)
+                                 value: vendorPointerType)
         evt.setIntegerValueField(.tabletProximityEventVendorPointerSerialNumber,
                                  value: currentSerial)
         evt.setIntegerValueField(.tabletProximityEventVendorUniqueID,
@@ -166,13 +492,32 @@ final class EventInjector {
     // MARK: - Mouse + tablet point event
 
     private func mapToScreen(state: PenState, model: WacomModel) -> CGPoint {
-        let normX = clamp(state.x / model.maxX, 0, 1)
-        let normY = clamp(state.y / model.maxY, 0, 1)
+        let config = ConfigStore.shared.current
+        let bounds = displayBounds(index: config.displayIndex)
+        let area = config.effectiveArea(tabletAspect: model.widthMM / model.heightMM,
+                                        screenAspect: Double(bounds.width / bounds.height))
+        let normX = clamp((state.x / model.maxX - area.left) / (area.right - area.left), 0, 1)
+        let normY = clamp((state.y / model.maxY - area.top) / (area.bottom - area.top), 0, 1)
+        return CGPoint(x: bounds.minX + CGFloat(normX) * (bounds.width - 1),
+                       y: bounds.minY + CGFloat(normY) * (bounds.height - 1))
+    }
 
-        let primary = NSScreen.screens.first ?? NSScreen.main
-        let width = primary?.frame.width ?? 1920
-        let height = primary?.frame.height ?? 1080
-        return CGPoint(x: normX * width, y: normY * height)
+    /// Global CG bounds (top-left origin) of `NSScreen.screens[index]`,
+    /// falling back to the menu-bar display. Cached for a second since this
+    /// runs for every pen report.
+    private func displayBounds(index: Int) -> CGRect {
+        let now = CFAbsoluteTimeGetCurrent()
+        if let cached = cachedDisplay, cached.index == index, now - cached.at < 1 {
+            return cached.bounds
+        }
+        let screens = NSScreen.screens
+        let screen = screens.indices.contains(index) ? screens[index] : screens.first
+        var bounds = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        if let number = screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber {
+            bounds = CGDisplayBounds(CGDirectDisplayID(number.uint32Value))
+        }
+        cachedDisplay = (index, bounds, now)
+        return bounds
     }
 
     private func postMouseEvent(
@@ -188,6 +533,10 @@ final class EventInjector {
             mouseCursorPosition: point,
             mouseButton: button
         ) else { return }
+
+        // Modifiers held by a button (⌥ pipette, ⇧ + middle-drag…).
+        let flags = heldModifierFlags
+        if !flags.isEmpty { evt.flags = flags }
 
         evt.setIntegerValueField(.mouseEventSubtype, value: 1)  // NSEventSubtype.tabletPoint = 1
         evt.setDoubleValueField(.mouseEventPressure, value: state.pressure)
@@ -326,7 +675,7 @@ final class EventInjector {
         up.post(tap: .cghidEventTap)
     }
 
-    // MARK: - Scroll wheel (2-finger touch)
+    // MARK: - Scroll wheel (2-finger touch, hover scroll)
 
     /// Posts a pixel-precise scroll event. `dx` / `dy` are in OS scroll units
     /// already (i.e. the caller is responsible for sensitivity scaling).
@@ -344,6 +693,8 @@ final class EventInjector {
             wheel3: 0
         ) else { return }
 
+        let flags = heldModifierFlags
+        if !flags.isEmpty { evt.flags = flags }
         evt.post(tap: .cghidEventTap)
         Verbose.log(String(format: "scroll dy=%d dx=%d", intDy, intDx))
     }
@@ -351,8 +702,8 @@ final class EventInjector {
     private func tabletButtonsMask(state: PenState) -> Int64 {
         var mask: Int64 = 0
         if state.tipDown      { mask |= 0x01 }
-        if state.barrelButton { mask |= 0x02 }
-        if state.eraser       { mask |= 0x04 }
+        if state.lowerButton  { mask |= 0x02 }
+        if state.upperButton || state.eraser { mask |= 0x04 }
         return mask
     }
 

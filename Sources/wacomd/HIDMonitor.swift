@@ -5,6 +5,9 @@ import IOKit.hid
 final class HIDMonitor {
     private var manager: IOHIDManager!
     private var devices: [IOHIDDevice: WacomDevice] = [:]
+    /// One injector for all interfaces (pen, pad/touch) so held modes and
+    /// held mouse buttons are shared between them.
+    private let injector = EventInjector()
 
     static let wacomVendorID = 0x056a
 
@@ -69,7 +72,7 @@ final class HIDMonitor {
         // We currently open every matching interface and let the input-value
         // callback parse what it understands.
         print("[wacomd] + Connecté: \(model.name)")
-        let wacom = WacomDevice(device: device, model: model)
+        let wacom = WacomDevice(device: device, model: model, injector: injector)
         wacom.start()
         devices[device] = wacom
     }

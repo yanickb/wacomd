@@ -8,7 +8,10 @@ struct PenState {
     var tiltY: Double = 0
     var inRange: Bool = false
     var tipDown: Bool = false
-    var barrelButton: Bool = false
+    /// Side button closest to the tip (status bit 0x02).
+    var lowerButton: Bool = false
+    /// Side button farthest from the tip (status bit 0x04).
+    var upperButton: Bool = false
     var eraser: Bool = false
 }
 

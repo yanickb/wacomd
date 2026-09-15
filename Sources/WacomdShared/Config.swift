@@ -36,6 +36,50 @@ public struct WacomdConfig: Codable, Equatable {
     /// looser and slow short cursor movements get hijacked as taps.
     public var tapMaxRawMovement: Double = 25
 
+    // ---- Buttons ----------------------------------------------------------
+    /// Bindings used when the frontmost app has no enabled profile.
+    public var buttons = ButtonMap()
+    /// Per-app bindings, matched on the frontmost app's bundle identifier.
+    public var appProfiles: [AppProfile] = []
+    /// Max delay between two presses to count as a double press.
+    public var doubleTapMs: Int = 300
+    /// Hold duration after which a press becomes a long press.
+    public var longPressMs: Int = 500
+    /// On-screen bubble showing active modes and fired shortcuts.
+    public var hudEnabled: Bool = true
+    /// Opacity of the bubble background, 0 (text only) … 1 (opaque).
+    public var hudOpacity: Double = 0.35
+
+    // ---- Pressure ---------------------------------------------------------
+    /// Exponent applied to the normalised pressure : < 1 soft (thick strokes
+    /// with little force), > 1 firm.
+    public var pressureCurve: Double = 1.0
+    /// Normalised pressure under which the tip is ignored (light grazes).
+    public var pressureMin: Double = 0.0
+    /// Normalised pressure at which the output saturates to 1.
+    public var pressureMax: Double = 1.0
+
+    // ---- Tablet → screen mapping ------------------------------------------
+    /// Index in `NSScreen.screens` (0 = display with the menu bar).
+    public var displayIndex: Int = 0
+    /// Trim the active area so a circle drawn on the tablet stays round.
+    public var keepAspectRatio: Bool = true
+    /// Active area of the tablet, normalised 0…1 (origin top-left).
+    public var areaLeft: Double = 0
+    public var areaTop: Double = 0
+    public var areaRight: Double = 1
+    public var areaBottom: Double = 1
+
+    // ---- Modes ------------------------------------------------------------
+    /// Cursor speed factor while `.precision` is held.
+    public var precisionScale: Double = 0.25
+    /// Screen pixels of horizontal pen travel per brush-size key tap.
+    public var brushSizeStep: Double = 15
+    public var brushSizeDecrease: String = "["
+    public var brushSizeIncrease: String = "]"
+    /// Scroll pixels per screen pixel of pen travel while `.scroll` is held.
+    public var scrollSpeed: Double = 1.0
+
     public init() {}
 
     /// Custom decoder so adding new fields doesn't reject existing config
@@ -46,6 +90,10 @@ public struct WacomdConfig: Codable, Equatable {
         case naturalScroll
         case cursorSensitivity, scrollSensitivity, threeFingerSwipeThreshold
         case tapMaxDurationMs, tapMaxRawMovement
+        case buttons, appProfiles, doubleTapMs, longPressMs, hudEnabled, hudOpacity
+        case pressureCurve, pressureMin, pressureMax
+        case displayIndex, keepAspectRatio, areaLeft, areaTop, areaRight, areaBottom
+        case precisionScale, brushSizeStep, brushSizeDecrease, brushSizeIncrease, scrollSpeed
     }
 
     public init(from decoder: Decoder) throws {
@@ -62,6 +110,65 @@ public struct WacomdConfig: Codable, Equatable {
         self.threeFingerSwipeThreshold = try c.decodeIfPresent(Double.self, forKey: .threeFingerSwipeThreshold) ?? d.threeFingerSwipeThreshold
         self.tapMaxDurationMs  = try c.decodeIfPresent(Int.self,    forKey: .tapMaxDurationMs)  ?? d.tapMaxDurationMs
         self.tapMaxRawMovement = try c.decodeIfPresent(Double.self, forKey: .tapMaxRawMovement) ?? d.tapMaxRawMovement
+        // Before profiles, button keys lived at top level : read them from
+        // the same container when there is no "buttons" object.
+        self.buttons           = try c.decodeIfPresent(ButtonMap.self, forKey: .buttons) ?? ButtonMap(from: decoder)
+        self.appProfiles       = try c.decodeIfPresent([AppProfile].self, forKey: .appProfiles) ?? d.appProfiles
+        self.doubleTapMs       = try c.decodeIfPresent(Int.self,    forKey: .doubleTapMs)       ?? d.doubleTapMs
+        self.longPressMs       = try c.decodeIfPresent(Int.self,    forKey: .longPressMs)       ?? d.longPressMs
+        self.hudEnabled        = try c.decodeIfPresent(Bool.self,   forKey: .hudEnabled)        ?? d.hudEnabled
+        self.hudOpacity        = try c.decodeIfPresent(Double.self, forKey: .hudOpacity)        ?? d.hudOpacity
+        self.scrollSpeed       = try c.decodeIfPresent(Double.self, forKey: .scrollSpeed)       ?? d.scrollSpeed
+        self.pressureCurve     = try c.decodeIfPresent(Double.self, forKey: .pressureCurve)     ?? d.pressureCurve
+        self.pressureMin       = try c.decodeIfPresent(Double.self, forKey: .pressureMin)       ?? d.pressureMin
+        self.pressureMax       = try c.decodeIfPresent(Double.self, forKey: .pressureMax)       ?? d.pressureMax
+        self.displayIndex      = try c.decodeIfPresent(Int.self,    forKey: .displayIndex)      ?? d.displayIndex
+        self.keepAspectRatio   = try c.decodeIfPresent(Bool.self,   forKey: .keepAspectRatio)   ?? d.keepAspectRatio
+        self.areaLeft          = try c.decodeIfPresent(Double.self, forKey: .areaLeft)          ?? d.areaLeft
+        self.areaTop           = try c.decodeIfPresent(Double.self, forKey: .areaTop)           ?? d.areaTop
+        self.areaRight         = try c.decodeIfPresent(Double.self, forKey: .areaRight)         ?? d.areaRight
+        self.areaBottom        = try c.decodeIfPresent(Double.self, forKey: .areaBottom)        ?? d.areaBottom
+        self.precisionScale    = try c.decodeIfPresent(Double.self, forKey: .precisionScale)    ?? d.precisionScale
+        self.brushSizeStep     = try c.decodeIfPresent(Double.self, forKey: .brushSizeStep)     ?? d.brushSizeStep
+        self.brushSizeDecrease = try c.decodeIfPresent(String.self, forKey: .brushSizeDecrease) ?? d.brushSizeDecrease
+        self.brushSizeIncrease = try c.decodeIfPresent(String.self, forKey: .brushSizeIncrease) ?? d.brushSizeIncrease
+    }
+
+    /// Bindings for the given frontmost app : its enabled profile, else the default map.
+    public func buttonMap(forApp bundleID: String?) -> ButtonMap {
+        guard let bundleID = bundleID,
+              let profile = appProfiles.first(where: { $0.enabled && $0.bundleID == bundleID })
+        else { return buttons }
+        return profile.buttons
+    }
+
+    /// Maps a raw normalised pressure (0…1) through min / max / curve.
+    public func mappedPressure(_ raw: Double) -> Double {
+        let lo = min(max(pressureMin, 0), 0.95)
+        let hi = max(min(pressureMax, 1), lo + 0.05)
+        let t = min(max((raw - lo) / (hi - lo), 0), 1)
+        return pow(t, min(max(pressureCurve, 0.1), 10))
+    }
+
+    /// Active tablet area (normalised, origin top-left) after aspect-ratio
+    /// trimming. `tabletAspect` and `screenAspect` are width / height.
+    public func effectiveArea(tabletAspect: Double, screenAspect: Double) -> (left: Double, top: Double, right: Double, bottom: Double) {
+        var l = min(max(areaLeft, 0), 0.95), t = min(max(areaTop, 0), 0.95)
+        var r = max(min(areaRight, 1), l + 0.05), b = max(min(areaBottom, 1), t + 0.05)
+        guard keepAspectRatio, tabletAspect > 0, screenAspect > 0 else { return (l, t, r, b) }
+
+        let areaAspect = ((r - l) * tabletAspect) / (b - t)
+        if areaAspect > screenAspect {
+            // Too wide : shrink width around the centre.
+            let newWidth = (b - t) * screenAspect / tabletAspect
+            let cx = (l + r) / 2
+            l = cx - newWidth / 2; r = cx + newWidth / 2
+        } else {
+            let newHeight = (r - l) * tabletAspect / screenAspect
+            let cy = (t + b) / 2
+            t = cy - newHeight / 2; b = cy + newHeight / 2
+        }
+        return (l, t, r, b)
     }
 
     // ---- Where the config lives ------------------------------------------
@@ -147,7 +254,9 @@ public enum DaemonControl {
     public static func runningPID() -> pid_t? {
         let task = Process()
         task.launchPath = "/usr/bin/pgrep"
-        task.arguments = ["-f", "wacomd"]
+        // Exact process name : `-f wacomd` also matched wacomd-config and
+        // any shell whose command line mentions the repo.
+        task.arguments = ["-x", "wacomd"]
         let pipe = Pipe()
         task.standardOutput = pipe
         task.standardError = Pipe()
