@@ -86,6 +86,16 @@ public struct WacomdConfig: Codable, Equatable {
     /// Screen pixels of pen travel that trigger a pen gesture.
     public var penGestureDistance: Double = 70
 
+    // ---- Handwriting ------------------------------------------------------
+    /// Pause after the last stroke before the ink is recognised.
+    public var handwritingDelayMs: Int = 900
+    /// Recognition language : "auto", "fr-FR", "en-US"…
+    public var handwritingLanguage: String = "fr-FR"
+    /// Type a space after each recognised chunk, so words stay separated.
+    public var handwritingAddSpace: Bool = true
+    /// Click where the first stroke starts, to focus the text field under it.
+    public var handwritingClickToFocus: Bool = true
+
     // ---- Stabilizer -------------------------------------------------------
     /// Default state ; a `.stabilizer` button inverts it while active.
     public var stabilizerEnabled: Bool = false
@@ -104,6 +114,7 @@ public struct WacomdConfig: Codable, Equatable {
         case tapMaxDurationMs, tapMaxRawMovement
         case buttons, appProfiles, doubleTapMs, longPressMs, hudEnabled, hudOpacity
         case pressureCurve, pressureMin, pressureMax
+        case handwritingDelayMs, handwritingLanguage, handwritingAddSpace, handwritingClickToFocus
         case tabletOrientation, mouseSpeed, penGestureDistance, stabilizerEnabled, stabilizerStrength
         case displayIndex, keepAspectRatio, areaLeft, areaTop, areaRight, areaBottom
         case precisionScale, brushSizeStep, brushSizeDecrease, brushSizeIncrease, scrollSpeed
@@ -135,6 +146,10 @@ public struct WacomdConfig: Codable, Equatable {
         // An unknown orientation must not reject the whole file.
         self.tabletOrientation = ((try? c.decodeIfPresent(TabletOrientation.self, forKey: .tabletOrientation)) ?? nil) ?? d.tabletOrientation
         self.mouseSpeed        = try c.decodeIfPresent(Double.self, forKey: .mouseSpeed)        ?? d.mouseSpeed
+        self.handwritingDelayMs = try c.decodeIfPresent(Int.self,   forKey: .handwritingDelayMs) ?? d.handwritingDelayMs
+        self.handwritingLanguage = try c.decodeIfPresent(String.self, forKey: .handwritingLanguage) ?? d.handwritingLanguage
+        self.handwritingAddSpace = try c.decodeIfPresent(Bool.self, forKey: .handwritingAddSpace) ?? d.handwritingAddSpace
+        self.handwritingClickToFocus = try c.decodeIfPresent(Bool.self, forKey: .handwritingClickToFocus) ?? d.handwritingClickToFocus
         self.penGestureDistance = try c.decodeIfPresent(Double.self, forKey: .penGestureDistance) ?? d.penGestureDistance
         self.stabilizerEnabled = try c.decodeIfPresent(Bool.self,   forKey: .stabilizerEnabled) ?? d.stabilizerEnabled
         self.stabilizerStrength = try c.decodeIfPresent(Double.self, forKey: .stabilizerStrength) ?? d.stabilizerStrength

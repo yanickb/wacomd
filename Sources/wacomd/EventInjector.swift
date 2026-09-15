@@ -76,6 +76,10 @@ final class EventInjector {
     private var smoothedPoint: CGPoint?
     private var smoothedAt: CFAbsoluteTime = 0
     private var penGesturesHeld = 0
+    private var handwritingHeld = 0
+    /// A stroke started in handwriting mode : its drags and tip-up stay out
+    /// of the app even if the mode is turned off mid-stroke.
+    private var handwritingStrokeOpen = false
     private var penGestureAnchor: CGPoint?
     private var brushSizeHeld = 0
     /// Pen X (screen px) at which the next brush-size step is measured.
@@ -134,7 +138,12 @@ final class EventInjector {
         // ---- Proximity LEAVE ---------------------------------------------
         if !state.inRange {
             if lastTipDown {
-                postMouseEvent(type: .leftMouseUp, at: lastPoint, state: state, model: model)
+                if handwritingStrokeOpen {
+                    Handwriting.shared.endStroke()
+                    handwritingStrokeOpen = false
+                } else {
+                    postMouseEvent(type: .leftMouseUp, at: lastPoint, state: state, model: model)
+                }
                 lastTipDown = false
             }
             releasePenButtons()
@@ -205,8 +214,28 @@ final class EventInjector {
             }
         }
 
-        // Modes that reinterpret pen motion keep the cursor still.
-        if !(cursorFrozen && eventType == .mouseMoved) {
+        if handwritingStrokeOpen || (handwritingHeld > 0 && eventType == .leftMouseDown) {
+            // Handwriting : the stroke becomes ink, the app only sees the cursor move.
+            switch eventType {
+            case .leftMouseDown:
+                handwritingStrokeOpen = true
+                if Handwriting.shared.beginStroke(at: cgPoint), ConfigStore.shared.current.handwritingClickToFocus {
+                    postPlainClick(at: cgPoint)
+                }
+            case .leftMouseDragged:
+                Handwriting.shared.moveStroke(to: cgPoint)
+            case .leftMouseUp:
+                Handwriting.shared.moveStroke(to: cgPoint)
+                Handwriting.shared.endStroke()
+                handwritingStrokeOpen = false
+            default:
+                break
+            }
+            if let move = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: cgPoint, mouseButton: .left) {
+                move.post(tap: .cghidEventTap)
+            }
+        } else if !(cursorFrozen && eventType == .mouseMoved) {
+            // Modes that reinterpret pen motion keep the cursor still.
             postMouseEvent(type: eventType, at: cgPoint, state: state, model: model, button: eventButton)
         }
 
@@ -338,6 +367,15 @@ final class EventInjector {
         return CGPoint(x: clamp(point.x, nearest.minX, nearest.maxX - 1), y: clamp(point.y, nearest.minY, nearest.maxY - 1))
     }
 
+    /// Focuses whatever is under the pen before handwriting into it.
+    private func postPlainClick(at point: CGPoint) {
+        for type in [CGEventType.leftMouseDown, .leftMouseUp] {
+            guard let evt = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: point, mouseButton: .left) else { continue }
+            evt.setIntegerValueField(.mouseEventClickState, value: 1)
+            evt.post(tap: .cghidEventTap)
+        }
+    }
+
     private func runPenGesture(_ direction: Int) {
         let gestures = currentButtonMap(ConfigStore.shared.current).penGestures
         guard gestures.indices.contains(direction), gestures[direction] != .none else { return }
@@ -412,6 +450,7 @@ final class EventInjector {
         if scrollHeld > 0 { modes.append("Défilement") }
         if radialHeld > 0 { modes.append("Menu circulaire") }
         if penGesturesHeld > 0 { modes.append("Gestes") }
+        if handwritingHeld > 0 { modes.append("Écriture") }
         let flags = heldModifierFlags
         for (flag, name) in [(CGEventFlags.maskControl, "⌃"), (.maskAlternate, "⌥"), (.maskShift, "⇧"), (.maskCommand, "⌘")]
         where flags.contains(flag) { modes.append(name) }
@@ -450,6 +489,10 @@ final class EventInjector {
             let on = stabilizerActive
             Hud.shared.setMode("Stabilisateur", active: on)
             if !on { Hud.shared.flash("Stabilisateur off") }
+        case .handwriting:
+            handwritingHeld = max(0, handwritingHeld + delta)
+            Hud.shared.setMode("✎ Écriture", active: handwritingHeld > 0)
+            if handwritingHeld == 0 { Handwriting.shared.finishNow() }
         case .penGestures:
             penGesturesHeld = max(0, penGesturesHeld + delta)
             penGestureAnchor = nil

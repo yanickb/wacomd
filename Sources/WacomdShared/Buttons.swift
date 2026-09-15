@@ -34,6 +34,8 @@ public enum ButtonAction: Codable, Equatable, Hashable {
     case stabilizer
     /// While held, quick pen flicks up / right / down / left run actions.
     case penGestures
+    /// While held, pen strokes are handwriting turned into typed text.
+    case handwriting
     case shortcut(String)
 
     public init(_ raw: String) {
@@ -57,6 +59,7 @@ public enum ButtonAction: Codable, Equatable, Hashable {
         case "mousemode":    self = .mouseMode
         case "stabilizer":   self = .stabilizer
         case "pengestures":  self = .penGestures
+        case "handwriting":  self = .handwriting
         default:             self = .shortcut(trimmed)
         }
     }
@@ -77,6 +80,7 @@ public enum ButtonAction: Codable, Equatable, Hashable {
         case .mouseMode:       return "mouseMode"
         case .stabilizer:      return "stabilizer"
         case .penGestures:     return "penGestures"
+        case .handwriting:     return "handwriting"
         case .shortcut(let s): return s
         }
     }
@@ -87,7 +91,7 @@ public enum ButtonAction: Codable, Equatable, Hashable {
     public var isHoldMode: Bool {
         switch self {
         case .precision, .layer, .brushSize, .eraser, .scroll, .radialMenu,
-             .mouseMode, .stabilizer, .penGestures: return true
+             .mouseMode, .stabilizer, .penGestures, .handwriting: return true
         case .shortcut(let s):
             // Lone modifiers (`alt`) and modifier+click must be held too.
             let key = s.lowercased().split(separator: "+").last.map(String.init) ?? ""
@@ -114,6 +118,7 @@ public enum ButtonAction: Codable, Equatable, Hashable {
         case .mouseMode:       return "Mode souris"
         case .stabilizer:      return "Stabilisateur"
         case .penGestures:     return "Gestes au stylet"
+        case .handwriting:     return "Écriture"
         case .shortcut(let s): return Self.prettyShortcut(s)
         }
     }

@@ -399,6 +399,24 @@ struct PenTab: View {
                       help: "Lisse le trait pendant que la pointe touche. Plus c'est fort, plus le trait est propre mais suit avec un léger retard. Un bouton « Stabilisateur » inverse l'état par défaut.")
 
             Divider()
+            SectionTitle(text: "Écriture manuscrite", symbol: "pencil.and.scribble")
+            Text("Avec le bouton « Écriture manuscrite », écris n'importe où : l'encre s'affiche à l'écran, puis le texte reconnu est tapé dans le champ actif (reconnaissance intégrée à macOS, hors ligne).")
+                .font(.caption).foregroundStyle(.secondary)
+            Picker("Langue", selection: $model.config.handwritingLanguage) {
+                Text("Français").tag("fr-FR")
+                Text("Anglais").tag("en-US")
+                Text("Détection automatique").tag("auto")
+            }
+            SliderRow(label: "Pause avant reconnaissance",
+                      value: Binding(get: { Double(model.config.handwritingDelayMs) },
+                                     set: { model.config.handwritingDelayMs = Int($0) }),
+                      range: 300...2500, format: { String(format: "%.1f s", $0 / 1000) })
+            Toggle("Ajouter un espace après chaque mot", isOn: $model.config.handwritingAddSpace)
+                .toggleStyle(.switch)
+            Toggle("Cliquer au début de l'écriture (sélectionne le champ)", isOn: $model.config.handwritingClickToFocus)
+                .toggleStyle(.switch)
+
+            Divider()
             SectionTitle(text: "Mode souris", symbol: "computermouse")
             SliderRow(label: "Vitesse", value: $model.config.mouseSpeed, range: 0.3...4,
                       format: { String(format: "×%.1f", $0) },
@@ -716,7 +734,7 @@ struct RadialItemRow: View {
 /// Kind of action shown in the picker ; `.shortcut` reveals a text field.
 enum ActionKind: String, CaseIterable, Identifiable {
     case none, leftClick, rightClick, middleClick, shortcut, eraser, precision, layer, brushSize, scroll, radialMenu,
-         mouseMode, stabilizer, penGestures
+         mouseMode, stabilizer, penGestures, handwriting
     var id: String { rawValue }
 
     var title: String {
@@ -735,6 +753,7 @@ enum ActionKind: String, CaseIterable, Identifiable {
         case .mouseMode:   return "Mode souris"
         case .stabilizer:  return "Stabilisateur"
         case .penGestures: return "Gestes au stylet"
+        case .handwriting: return "Écriture manuscrite"
         }
     }
 
@@ -754,6 +773,7 @@ enum ActionKind: String, CaseIterable, Identifiable {
         case .mouseMode:   self = .mouseMode
         case .stabilizer:  self = .stabilizer
         case .penGestures: self = .penGestures
+        case .handwriting: self = .handwriting
         case .toggle(let inner): self.init(inner)
         }
     }
@@ -773,6 +793,7 @@ enum ActionKind: String, CaseIterable, Identifiable {
         case .mouseMode:   return .mouseMode
         case .stabilizer:  return .stabilizer
         case .penGestures: return .penGestures
+        case .handwriting: return .handwriting
         case .shortcut:
             if case .shortcut = previous { return previous }
             return .shortcut("")

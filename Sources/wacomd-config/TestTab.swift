@@ -65,9 +65,10 @@ final class LiveTestModel: ObservableObject {
     private func receive(_ info: [AnyHashable: Any]) {
         lastReceived = Date()
         receiving = true
-        profile = info["profile"] as? String ?? "—"
-        layer2 = info["layer2"] as? Bool ?? false
-        modes = info["modes"] as? [String] ?? []
+        // Handwriting results carry no state : keep the last one.
+        if let profile = info["profile"] as? String { self.profile = profile }
+        if let layer2 = info["layer2"] as? Bool { self.layer2 = layer2 }
+        if let modes = info["modes"] as? [String] { self.modes = modes }
 
         switch info["event"] as? String {
         case "pen":
@@ -98,6 +99,7 @@ final class LiveTestModel: ObservableObject {
         case "pen.upper": return "Stylet haut"
         case "pen.lower": return "Stylet bas"
         case "gesture":   return "Geste"
+        case "writing":   return "Écriture"
         default:
             if id.hasPrefix("pad.") { return "Touche " + id.dropFirst(4) }
             return id
