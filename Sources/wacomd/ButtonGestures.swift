@@ -14,11 +14,17 @@ import WacomdShared
 ///
 /// Everything runs on the main queue.
 final class ButtonGestures {
-    typealias Emit = (_ action: ButtonAction, _ id: String, _ pressed: Bool) -> Void
+    enum Kind: String {
+        case simple = "appui"
+        case double = "double appui"
+        case long = "appui long"
+    }
+
+    typealias Emit = (_ action: ButtonAction, _ id: String, _ pressed: Bool, _ kind: Kind) -> Void
 
     private enum Phase {
         /// An action is down and will be released with the button.
-        case holding(ButtonAction)
+        case holding(ButtonAction, Kind)
         /// Pressed, waiting to know whether it becomes a long press.
         case pressed(ButtonBinding, token: Int)
         /// Released once, waiting for a possible second press.
@@ -44,15 +50,15 @@ final class ButtonGestures {
 
     private func press(id: String, longPress: TimeInterval, binding: () -> ButtonBinding) {
         if case .awaitingDouble(let b, _)? = phases[id] {
-            phases[id] = .holding(b.double)
-            emit(b.double, id, true)
+            phases[id] = .holding(b.double, .double)
+            emit(b.double, id, true, .double)
             return
         }
 
         let b = binding()
         guard b.hasGestures else {
-            phases[id] = .holding(b.press)
-            emit(b.press, id, true)
+            phases[id] = .holding(b.press, .simple)
+            emit(b.press, id, true, .simple)
             return
         }
 
@@ -61,16 +67,16 @@ final class ButtonGestures {
         guard b.long != .none else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + longPress) { [weak self] in
             guard let self = self, case .pressed(_, let current)? = self.phases[id], current == token else { return }
-            self.phases[id] = .holding(b.long)
-            self.emit(b.long, id, true)
+            self.phases[id] = .holding(b.long, .long)
+            self.emit(b.long, id, true, .long)
         }
     }
 
     private func release(id: String, doubleTap: TimeInterval) {
         switch phases[id] {
-        case .holding(let action)?:
+        case .holding(let action, let kind)?:
             phases[id] = nil
-            emit(action, id, false)
+            emit(action, id, false, kind)
         case .pressed(let b, _)?:
             guard b.double != .none else {
                 phases[id] = nil
@@ -90,8 +96,8 @@ final class ButtonGestures {
     }
 
     private func tap(_ action: ButtonAction, id: String) {
-        emit(action, id, true)
-        emit(action, id, false)
+        emit(action, id, true, .simple)
+        emit(action, id, false, .simple)
     }
 
     private func makeToken() -> Int {

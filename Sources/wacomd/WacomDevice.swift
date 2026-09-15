@@ -235,6 +235,7 @@ final class WacomDevice {
             let config = ConfigStore.shared.current
             let rawPressure = min(1.0, max(0.0, Double(sample.pressure) / model.maxPressure))
             state.pressure = config.mappedPressure(rawPressure)
+            state.rawPressure = rawPressure
             // Sans capteur d'inclinaison, les octets tilt valent 0 → -64 :
             // on force 0 pour ne pas annoncer un stylet couché aux applis.
             let hasTilt = model.maxTilt > 0

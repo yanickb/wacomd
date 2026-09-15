@@ -52,8 +52,12 @@ final class EventInjector {
     /// Mouse button of a `modifiers+click` shortcut currently held, by button id.
     private var heldModifiedClicks: [String: CGMouseButton] = [:]
 
-    private lazy var gestures = ButtonGestures { [unowned self] action, id, pressed in
+    private lazy var gestures = ButtonGestures { [unowned self] action, id, pressed, kind in
         self.perform(action, id: id, pressed: pressed)
+        if pressed {
+            self.publishStatus(extra: ["event": "button", "button": id, "gesture": kind.rawValue,
+                                       "action": action.displayName])
+        }
     }
 
     // Modes driven by held buttons. Counters, since two buttons may share one.
@@ -62,8 +66,17 @@ final class EventInjector {
     /// Actions latched on by a `.toggle` press, by raw value.
     private var toggledActions: Set<String> = []
     private var precisionHeld = 0
-    /// Cursor and absolute pen position when precision mode started.
-    private var precisionAnchor: (screen: CGPoint, pen: CGPoint)?
+    private var mouseModeHeld = 0
+    /// Relative cursor (precision, mouse mode) : cursor position and the
+    /// previous absolute pen position it moves from.
+    private var relativeCursor: CGPoint = .zero
+    private var relativePen: CGPoint?
+    private var stabilizerHeld = 0
+    /// Smoothed pen position while the tip is down, and its last update time.
+    private var smoothedPoint: CGPoint?
+    private var smoothedAt: CFAbsoluteTime = 0
+    private var penGesturesHeld = 0
+    private var penGestureAnchor: CGPoint?
     private var brushSizeHeld = 0
     /// Pen X (screen px) at which the next brush-size step is measured.
     private var brushAnchorX: CGFloat?
@@ -109,7 +122,8 @@ final class EventInjector {
     /// 240 Hz is plenty: the PTH-451 reports at ~200 Hz.
     private let throttleInterval: CFAbsoluteTime = 1.0 / 240.0
 
-    private var cursorFrozen: Bool { brushSizeHeld > 0 || scrollHeld > 0 || radialHeld > 0 }
+    private var cursorFrozen: Bool { brushSizeHeld > 0 || scrollHeld > 0 || radialHeld > 0 || penGesturesHeld > 0 }
+    private var stabilizerActive: Bool { ConfigStore.shared.current.stabilizerEnabled != (stabilizerHeld > 0) }
     private var heldModifierFlags: CGEventFlags {
         heldModifiers.values.reduce(into: CGEventFlags()) { $0.formUnion($1) }
     }
@@ -124,6 +138,11 @@ final class EventInjector {
                 lastTipDown = false
             }
             releasePenButtons()
+            // Lifting the pen and putting it back down doesn't move a
+            // relative cursor, like lifting a mouse.
+            relativePen = nil
+            penGestureAnchor = nil
+            smoothedPoint = nil
             if lastInRange {
                 postProximityEvent(entering: false, model: model)
                 lastInRange = false
@@ -148,10 +167,17 @@ final class EventInjector {
             postProximityEvent(entering: true, model: model)
         }
 
-        let cgPoint = applyModes(to: mapToScreen(state: state, model: model))
+        let absolute = stabilize(mapToScreen(state: state, model: model), tipDown: state.tipDown)
+        let cgPoint = applyModes(to: absolute)
         lastPoint = cgPoint
         lastState = state
         lastModel = model
+        if LiveStatus.shared.active {
+            publishStatus(extra: ["event": "pen", "rawPressure": state.rawPressure, "pressure": state.pressure,
+                                  "x": Double(cgPoint.x), "y": Double(cgPoint.y), "tip": state.tipDown,
+                                  "eraser": currentPointerType == .eraser],
+                          isPenSample: true)
+        }
 
         // ---- Decide mouse-event type ------------------------------------
         let eventType: CGEventType
@@ -222,6 +248,19 @@ final class EventInjector {
                 radialSelection = RadialMenuView.sector(dx: absolute.x - anchor.x, dy: absolute.y - anchor.y,
                                                         count: radialItems.count)
                 Hud.shared.highlightRadial(radialSelection)
+            } else if penGesturesHeld > 0 {
+                // A quick flick past the distance runs its direction's action,
+                // then re-anchors so several flicks can follow while held.
+                let anchor = penGestureAnchor ?? absolute
+                let dx = absolute.x - anchor.x, dy = absolute.y - anchor.y
+                if hypot(dx, dy) >= CGFloat(max(config.penGestureDistance, 15)) {
+                    // 0 up, 1 right, 2 down, 3 left (screen y grows downwards).
+                    let direction = abs(dx) > abs(dy) ? (dx > 0 ? 1 : 3) : (dy > 0 ? 2 : 0)
+                    runPenGesture(direction)
+                    penGestureAnchor = absolute
+                } else {
+                    penGestureAnchor = anchor
+                }
             } else if brushSizeHeld > 0 {
                 // Horizontal travel taps the brush-size keys.
                 let step = CGFloat(max(config.brushSizeStep, 2))
@@ -245,14 +284,70 @@ final class EventInjector {
             }
             return frozen
         }
-        if precisionHeld > 0 {
-            let anchor = precisionAnchor ?? (screen: currentCursorPosition(), pen: absolute)
-            precisionAnchor = anchor
-            let scale = CGFloat(clamp(config.precisionScale, 0.02, 1))
-            return CGPoint(x: anchor.screen.x + (absolute.x - anchor.pen.x) * scale,
-                           y: anchor.screen.y + (absolute.y - anchor.pen.y) * scale)
+        if precisionHeld > 0 || mouseModeHeld > 0 {
+            guard let previous = relativePen else {
+                relativePen = absolute
+                relativeCursor = currentCursorPosition()
+                return relativeCursor
+            }
+            var scale = 1.0
+            if precisionHeld > 0 { scale *= clamp(config.precisionScale, 0.02, 1) }
+            if mouseModeHeld > 0 { scale *= clamp(config.mouseSpeed, 0.1, 5) }
+            relativePen = absolute
+            relativeCursor = clampToDisplays(CGPoint(x: relativeCursor.x + (absolute.x - previous.x) * CGFloat(scale),
+                                                     y: relativeCursor.y + (absolute.y - previous.y) * CGFloat(scale)))
+            return relativeCursor
         }
         return absolute
+    }
+
+    /// Exponential smoothing of the stroke while the tip is down. Time based,
+    /// so the feel doesn't depend on the tablet's report rate. Hovering is
+    /// never smoothed, and each stroke starts exactly under the pen.
+    private func stabilize(_ point: CGPoint, tipDown: Bool) -> CGPoint {
+        let strength = clamp(ConfigStore.shared.current.stabilizerStrength, 0, 100) / 100
+        let now = CFAbsoluteTimeGetCurrent()
+        guard tipDown, stabilizerActive, strength > 0, let previous = smoothedPoint else {
+            smoothedPoint = tipDown ? point : nil
+            smoothedAt = now
+            return point
+        }
+        // Time constant 0 … 120 ms, quadratic so low settings stay subtle.
+        let tau = 0.12 * strength * strength
+        let dt = clamp(now - smoothedAt, 0, 0.05)
+        let alpha = CGFloat(1 - exp(-dt / tau))
+        let smoothed = CGPoint(x: previous.x + (point.x - previous.x) * alpha,
+                               y: previous.y + (point.y - previous.y) * alpha)
+        smoothedPoint = smoothed
+        smoothedAt = now
+        return smoothed
+    }
+
+    /// Keeps a relative cursor on the displays.
+    private func clampToDisplays(_ point: CGPoint) -> CGPoint {
+        var ids = [CGDirectDisplayID](repeating: 0, count: 16)
+        var count: UInt32 = 0
+        guard CGGetActiveDisplayList(UInt32(ids.count), &ids, &count) == .success, count > 0 else { return point }
+        let bounds = ids.prefix(Int(count)).map { CGDisplayBounds($0) }
+        if bounds.contains(where: { $0.contains(point) }) { return point }
+        // Outside every display : pull onto the nearest one.
+        let nearest = bounds.min { a, b in
+            hypot(clamp(point.x, a.minX, a.maxX - 1) - point.x, clamp(point.y, a.minY, a.maxY - 1) - point.y)
+                < hypot(clamp(point.x, b.minX, b.maxX - 1) - point.x, clamp(point.y, b.minY, b.maxY - 1) - point.y)
+        }!
+        return CGPoint(x: clamp(point.x, nearest.minX, nearest.maxX - 1), y: clamp(point.y, nearest.minY, nearest.maxY - 1))
+    }
+
+    private func runPenGesture(_ direction: Int) {
+        let gestures = currentButtonMap(ConfigStore.shared.current).penGestures
+        guard gestures.indices.contains(direction), gestures[direction] != .none else { return }
+        let action = gestures[direction]
+        let arrow = ["↑", "→", "↓", "←"][direction]
+        Hud.shared.flash("\(arrow) \(action.displayName)")
+        perform(action, id: "gesture", pressed: true)
+        perform(action, id: "gesture", pressed: false)
+        publishStatus(extra: ["event": "button", "button": "gesture", "gesture": "geste \(arrow)",
+                              "action": action.displayName])
     }
 
     private func tapShortcut(_ spec: String) {
@@ -279,10 +374,48 @@ final class EventInjector {
     }
 
     private func currentButtonMap(_ config: WacomdConfig) -> ButtonMap {
-        let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-        let map = config.buttonMap(forApp: bundleID)
-        Verbose.log("app au premier plan : \(bundleID ?? "?")\(map == config.buttons ? " (profil par défaut)" : "")")
-        return map
+        config.buttonMap(forApp: effectiveBundleID())
+    }
+
+    /// Frontmost app, or the profile picked in the configurator's Test tab
+    /// while the configurator itself is frontmost.
+    private func effectiveBundleID() -> String? {
+        let frontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        if frontmost == LiveStatusNames.configuratorBundleID, LiveStatus.shared.active,
+           let test = LiveStatus.shared.testBundleID {
+            return test
+        }
+        return frontmost
+    }
+
+    /// Sends the current state (profile, layer, modes) plus `extra` to the Test tab.
+    private func publishStatus(extra: [String: Any] = [:], isPenSample: Bool = false) {
+        guard LiveStatus.shared.active else { return }
+        let config = ConfigStore.shared.current
+        let bundleID = effectiveBundleID()
+        var info = extra
+        info["app"] = bundleID ?? ""
+        info["profile"] = config.profile(forApp: bundleID)?.name ?? "Par défaut"
+        info["layer2"] = layer2Active
+        info["modes"] = activeModes
+        LiveStatus.shared.post(info, isPenSample: isPenSample)
+    }
+
+    private var activeModes: [String] {
+        var modes: [String] = []
+        if layer2Active { modes.append("Calque 2") }
+        if eraserHeld > 0 { modes.append("Gomme") }
+        if precisionHeld > 0 { modes.append("Précision") }
+        if mouseModeHeld > 0 { modes.append("Mode souris") }
+        if stabilizerActive { modes.append("Stabilisateur") }
+        if brushSizeHeld > 0 { modes.append("Taille pinceau") }
+        if scrollHeld > 0 { modes.append("Défilement") }
+        if radialHeld > 0 { modes.append("Menu circulaire") }
+        if penGesturesHeld > 0 { modes.append("Gestes") }
+        let flags = heldModifierFlags
+        for (flag, name) in [(CGEventFlags.maskControl, "⌃"), (.maskAlternate, "⌥"), (.maskShift, "⇧"), (.maskCommand, "⌘")]
+        where flags.contains(flag) { modes.append(name) }
+        return modes
     }
 
     /// Press or release an action. `id` identifies the physical button so a
@@ -305,8 +438,23 @@ final class EventInjector {
             perform(inner, id: "toggle.\(key)", pressed: turningOn)
         case .precision:
             precisionHeld = max(0, precisionHeld + delta)
-            precisionAnchor = nil
+            relativePen = nil
             Hud.shared.setMode(action.displayName, active: precisionHeld > 0)
+        case .mouseMode:
+            mouseModeHeld = max(0, mouseModeHeld + delta)
+            relativePen = nil
+            Hud.shared.setMode(action.displayName, active: mouseModeHeld > 0)
+        case .stabilizer:
+            stabilizerHeld = max(0, stabilizerHeld + delta)
+            smoothedPoint = nil
+            let on = stabilizerActive
+            Hud.shared.setMode("Stabilisateur", active: on)
+            if !on { Hud.shared.flash("Stabilisateur off") }
+        case .penGestures:
+            penGesturesHeld = max(0, penGesturesHeld + delta)
+            penGestureAnchor = nil
+            modeFreezeChanged()
+            Hud.shared.setMode("Gestes ↑→↓←", active: penGesturesHeld > 0)
         case .brushSize:
             brushSizeHeld = max(0, brushSizeHeld + delta)
             brushAnchorX = nil
@@ -494,10 +642,13 @@ final class EventInjector {
     private func mapToScreen(state: PenState, model: WacomModel) -> CGPoint {
         let config = ConfigStore.shared.current
         let bounds = displayBounds(index: config.displayIndex)
-        let area = config.effectiveArea(tabletAspect: model.widthMM / model.heightMM,
+        let orientation = config.tabletOrientation
+        // The active area is expressed in the surface as the user sees it.
+        let area = config.effectiveArea(tabletAspect: orientation.aspect(tabletAspect: model.widthMM / model.heightMM),
                                         screenAspect: Double(bounds.width / bounds.height))
-        let normX = clamp((state.x / model.maxX - area.left) / (area.right - area.left), 0, 1)
-        let normY = clamp((state.y / model.maxY - area.top) / (area.bottom - area.top), 0, 1)
+        let seen = orientation.orient(x: state.x / model.maxX, y: state.y / model.maxY)
+        let normX = clamp((seen.x - area.left) / (area.right - area.left), 0, 1)
+        let normY = clamp((seen.y - area.top) / (area.bottom - area.top), 0, 1)
         return CGPoint(x: bounds.minX + CGFloat(normX) * (bounds.width - 1),
                        y: bounds.minY + CGFloat(normY) * (bounds.height - 1))
     }

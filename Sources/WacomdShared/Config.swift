@@ -60,6 +60,8 @@ public struct WacomdConfig: Codable, Equatable {
     public var pressureMax: Double = 1.0
 
     // ---- Tablet → screen mapping ------------------------------------------
+    /// How the tablet lies on the desk.
+    public var tabletOrientation: TabletOrientation = .landscape
     /// Index in `NSScreen.screens` (0 = display with the menu bar).
     public var displayIndex: Int = 0
     /// Trim the active area so a circle drawn on the tablet stays round.
@@ -79,6 +81,16 @@ public struct WacomdConfig: Codable, Equatable {
     public var brushSizeIncrease: String = "]"
     /// Scroll pixels per screen pixel of pen travel while `.scroll` is held.
     public var scrollSpeed: Double = 1.0
+    /// Cursor pixels per screen pixel of pen travel in mouse mode.
+    public var mouseSpeed: Double = 1.0
+    /// Screen pixels of pen travel that trigger a pen gesture.
+    public var penGestureDistance: Double = 70
+
+    // ---- Stabilizer -------------------------------------------------------
+    /// Default state ; a `.stabilizer` button inverts it while active.
+    public var stabilizerEnabled: Bool = false
+    /// 0 (off) … 100 (strong smoothing, more lag).
+    public var stabilizerStrength: Double = 40
 
     public init() {}
 
@@ -92,6 +104,7 @@ public struct WacomdConfig: Codable, Equatable {
         case tapMaxDurationMs, tapMaxRawMovement
         case buttons, appProfiles, doubleTapMs, longPressMs, hudEnabled, hudOpacity
         case pressureCurve, pressureMin, pressureMax
+        case tabletOrientation, mouseSpeed, penGestureDistance, stabilizerEnabled, stabilizerStrength
         case displayIndex, keepAspectRatio, areaLeft, areaTop, areaRight, areaBottom
         case precisionScale, brushSizeStep, brushSizeDecrease, brushSizeIncrease, scrollSpeed
     }
@@ -119,6 +132,12 @@ public struct WacomdConfig: Codable, Equatable {
         self.hudEnabled        = try c.decodeIfPresent(Bool.self,   forKey: .hudEnabled)        ?? d.hudEnabled
         self.hudOpacity        = try c.decodeIfPresent(Double.self, forKey: .hudOpacity)        ?? d.hudOpacity
         self.scrollSpeed       = try c.decodeIfPresent(Double.self, forKey: .scrollSpeed)       ?? d.scrollSpeed
+        // An unknown orientation must not reject the whole file.
+        self.tabletOrientation = ((try? c.decodeIfPresent(TabletOrientation.self, forKey: .tabletOrientation)) ?? nil) ?? d.tabletOrientation
+        self.mouseSpeed        = try c.decodeIfPresent(Double.self, forKey: .mouseSpeed)        ?? d.mouseSpeed
+        self.penGestureDistance = try c.decodeIfPresent(Double.self, forKey: .penGestureDistance) ?? d.penGestureDistance
+        self.stabilizerEnabled = try c.decodeIfPresent(Bool.self,   forKey: .stabilizerEnabled) ?? d.stabilizerEnabled
+        self.stabilizerStrength = try c.decodeIfPresent(Double.self, forKey: .stabilizerStrength) ?? d.stabilizerStrength
         self.pressureCurve     = try c.decodeIfPresent(Double.self, forKey: .pressureCurve)     ?? d.pressureCurve
         self.pressureMin       = try c.decodeIfPresent(Double.self, forKey: .pressureMin)       ?? d.pressureMin
         self.pressureMax       = try c.decodeIfPresent(Double.self, forKey: .pressureMax)       ?? d.pressureMax
@@ -134,12 +153,15 @@ public struct WacomdConfig: Codable, Equatable {
         self.brushSizeIncrease = try c.decodeIfPresent(String.self, forKey: .brushSizeIncrease) ?? d.brushSizeIncrease
     }
 
+    /// Enabled profile of the given app, if any.
+    public func profile(forApp bundleID: String?) -> AppProfile? {
+        guard let bundleID = bundleID else { return nil }
+        return appProfiles.first { $0.enabled && $0.bundleID == bundleID }
+    }
+
     /// Bindings for the given frontmost app : its enabled profile, else the default map.
     public func buttonMap(forApp bundleID: String?) -> ButtonMap {
-        guard let bundleID = bundleID,
-              let profile = appProfiles.first(where: { $0.enabled && $0.bundleID == bundleID })
-        else { return buttons }
-        return profile.buttons
+        profile(forApp: bundleID)?.buttons ?? buttons
     }
 
     /// Maps a raw normalised pressure (0…1) through min / max / curve.
@@ -280,4 +302,63 @@ public enum DaemonControl {
         guard let pid = runningPID() else { return }
         kill(pid, SIGHUP)
     }
+}
+
+// MARK: - Orientation
+
+public enum TabletOrientation: String, Codable, CaseIterable {
+    /// Keys along the top edge, numbered left to right.
+    case landscape
+    /// Tablet turned a quarter counter-clockwise : keys on the left edge,
+    /// numbered bottom to top.
+    case portraitButtonsLeft
+
+    public var title: String {
+        switch self {
+        case .landscape:           return "Paysage (touches en haut)"
+        case .portraitButtonsLeft: return "Portrait, touches à gauche"
+        }
+    }
+
+    /// How the pad keys are numbered as seen by the user.
+    public var keyOrder: String {
+        switch self {
+        case .landscape:           return "de gauche à droite"
+        case .portraitButtonsLeft: return "de bas en haut"
+        }
+    }
+
+    /// Width / height of the surface as the user sees it.
+    public func aspect(tabletAspect: Double) -> Double {
+        self == .landscape ? tabletAspect : 1 / tabletAspect
+    }
+
+    /// Raw tablet position (normalised, origin top-left of the landscape
+    /// surface) → position as seen by the user.
+    public func orient(x: Double, y: Double) -> (x: Double, y: Double) {
+        switch self {
+        case .landscape:
+            return (x, y)
+        case .portraitButtonsLeft:
+            // The landscape top edge becomes the left edge ; its right end
+            // (key 4) ends up at the top.
+            return (y, 1 - x)
+        }
+    }
+}
+
+// MARK: - Live status (daemon ⇄ configurator test tab)
+
+/// Distributed notifications between the daemon and the configurator's Test
+/// tab. The configurator sends `subscribe` every couple of seconds while the
+/// tab is open ; the daemon only publishes `status` while subscribed.
+public enum LiveStatusNames {
+    public static let subscribe = Notification.Name("com.local.wacomd.live.subscribe")
+    public static let status = Notification.Name("com.local.wacomd.live.status")
+    /// Seconds a subscription lasts without renewal.
+    public static let subscriptionLifetime: Double = 5
+    /// `subscribe` userInfo key : bundle id whose profile the daemon uses
+    /// while the configurator itself is frontmost ("" = its own profile).
+    public static let testBundleIDKey = "testBundleID"
+    public static let configuratorBundleID = "com.local.wacomd-config"
 }

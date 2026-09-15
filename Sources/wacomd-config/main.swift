@@ -156,6 +156,9 @@ final class ConfigModel: ObservableObject {
         recordingField = nil
     }
 
+    /// Live data from the daemon for the Test tab.
+    let live = LiveTestModel()
+
     // MARK: Profiles
 
     /// Profile edited in the Boutons tab : -1 = default map, else an index
@@ -184,6 +187,22 @@ final class ConfigModel: ObservableObject {
             set: { newValue in
                 var map = self.editedMap
                 map.setLayerBinding(newValue, for: button, layer2: layer2)
+                self.editedMap = map
+            }
+        )
+    }
+
+    /// Action of a pen gesture : 0 up, 1 right, 2 down, 3 left.
+    func penGesture(_ index: Int) -> Binding<ButtonAction> {
+        Binding(
+            get: {
+                let gestures = self.editedMap.penGestures
+                return gestures.indices.contains(index) ? gestures[index] : .none
+            },
+            set: { newValue in
+                var map = self.editedMap
+                while map.penGestures.count <= index { map.penGestures.append(.none) }
+                map.penGestures[index] = newValue
                 self.editedMap = map
             }
         )
@@ -262,6 +281,8 @@ struct ConfigView: View {
                     .tabItem { Label("Boutons", systemImage: "button.horizontal.top.press") }
                 ScrollView { TouchTab(model: model).padding(16) }
                     .tabItem { Label("Tactile", systemImage: "hand.tap") }
+                ScrollView { TestTab(model: model, live: model.live).padding(16) }
+                    .tabItem { Label("Test", systemImage: "waveform.path.ecg") }
             }
             .padding(.horizontal, 10)
             Divider()
@@ -370,6 +391,26 @@ struct PenTab: View {
                       format: { String(format: "×%.1f", $0) })
 
             Divider()
+            SectionTitle(text: "Stabilisateur de trait", symbol: "scribble")
+            Toggle("Activé par défaut", isOn: $model.config.stabilizerEnabled)
+                .toggleStyle(.switch)
+            SliderRow(label: "Force", value: $model.config.stabilizerStrength, range: 0...100,
+                      format: { String(format: "%.0f", $0) },
+                      help: "Lisse le trait pendant que la pointe touche. Plus c'est fort, plus le trait est propre mais suit avec un léger retard. Un bouton « Stabilisateur » inverse l'état par défaut.")
+
+            Divider()
+            SectionTitle(text: "Mode souris", symbol: "computermouse")
+            SliderRow(label: "Vitesse", value: $model.config.mouseSpeed, range: 0.3...4,
+                      format: { String(format: "×%.1f", $0) },
+                      help: "Avec le bouton « Mode souris », le stylet déplace le curseur comme une souris : lever le stylet et le reposer ne fait pas sauter le curseur.")
+
+            Divider()
+            SectionTitle(text: "Gestes au stylet", symbol: "hand.draw")
+            SliderRow(label: "Distance du geste", value: $model.config.penGestureDistance, range: 30...200,
+                      format: { String(format: "%.0f px", $0) },
+                      help: "Déplacement du curseur qui déclenche un geste. Les actions se règlent dans l'onglet Boutons.")
+
+            Divider()
             SectionTitle(text: "Mode précision", symbol: "scope")
             SliderRow(label: "Vitesse du curseur", value: $model.config.precisionScale, range: 0.05...0.8,
                       format: { String(format: "×%.2f", $0) },
@@ -431,9 +472,9 @@ struct PressureCurveView: View {
 struct ScreenTab: View {
     @ObservedObject var model: ConfigModel
 
-    /// Width / height of the active surface. PTH-451 (157×98 mm) and
-    /// CTL-490 (152×95 mm) are both 1.6.
-    private let tabletAspect = 1.6
+    /// Width / height of the active surface as seen by the user. PTH-451
+    /// (157×98 mm) and CTL-490 (152×95 mm) are both 1.6 in landscape.
+    private var tabletAspect: Double { model.config.tabletOrientation.aspect(tabletAspect: 1.6) }
 
     private var screens: [NSScreen] { NSScreen.screens }
 
@@ -447,6 +488,20 @@ struct ScreenTab: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
+            SectionTitle(text: "Orientation de la tablette", symbol: "rotate.left")
+            Picker("Orientation", selection: $model.config.tabletOrientation) {
+                ForEach(TabletOrientation.allCases, id: \.self) { orientation in
+                    Text(orientation.title).tag(orientation)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            Text(model.config.tabletOrientation == .landscape
+                 ? "Touches en haut, numérotées de gauche à droite."
+                 : "Tablette tournée d'un quart de tour vers la gauche : touches à gauche, 1 en bas et 4 en haut.")
+                .font(.caption).foregroundStyle(.secondary)
+
+            Divider()
             SectionTitle(text: "Écran cible", symbol: "display")
             Picker("Écran", selection: $model.config.displayIndex) {
                 ForEach(Array(screens.enumerated()), id: \.offset) { index, screen in
@@ -556,8 +611,18 @@ struct ButtonsTab: View {
                 BindingRows(model: model, id: "\(prefix).pad.\(index)", label: "Touche \(index + 1)",
                             binding: model.binding(for: .pad(index), layer2: layer2))
             }
-            Text("Touches numérotées de gauche à droite.")
+            Text("Touches numérotées \(model.config.tabletOrientation.keyOrder) (orientation réglée dans l'onglet Écran).")
                 .font(.caption).foregroundStyle(.secondary)
+
+            Divider()
+            SectionTitle(text: "Gestes au stylet", symbol: "arrow.up.and.down.and.arrow.left.and.right")
+            Text("Maintiens (ou bascule) le bouton « Gestes au stylet » et fais un petit geste rapide au-dessus de la tablette. Plusieurs gestes possibles d'affilée.")
+                .font(.caption).foregroundStyle(.secondary)
+            ForEach(0..<4, id: \.self) { index in
+                ActionRow(model: model, id: "P\(model.editingProfile).gesture.\(index)",
+                          label: ["↑ Haut", "→ Droite", "↓ Bas", "← Gauche"][index],
+                          action: model.penGesture(index))
+            }
 
             Divider()
             SectionTitle(text: "Menu circulaire", symbol: "circle.grid.cross")
@@ -650,7 +715,8 @@ struct RadialItemRow: View {
 
 /// Kind of action shown in the picker ; `.shortcut` reveals a text field.
 enum ActionKind: String, CaseIterable, Identifiable {
-    case none, leftClick, rightClick, middleClick, shortcut, eraser, precision, layer, brushSize, scroll, radialMenu
+    case none, leftClick, rightClick, middleClick, shortcut, eraser, precision, layer, brushSize, scroll, radialMenu,
+         mouseMode, stabilizer, penGestures
     var id: String { rawValue }
 
     var title: String {
@@ -666,6 +732,9 @@ enum ActionKind: String, CaseIterable, Identifiable {
         case .brushSize:   return "Taille pinceau"
         case .scroll:      return "Défilement au stylet"
         case .radialMenu:  return "Menu circulaire"
+        case .mouseMode:   return "Mode souris"
+        case .stabilizer:  return "Stabilisateur"
+        case .penGestures: return "Gestes au stylet"
         }
     }
 
@@ -682,6 +751,9 @@ enum ActionKind: String, CaseIterable, Identifiable {
         case .brushSize:   self = .brushSize
         case .scroll:      self = .scroll
         case .radialMenu:  self = .radialMenu
+        case .mouseMode:   self = .mouseMode
+        case .stabilizer:  self = .stabilizer
+        case .penGestures: self = .penGestures
         case .toggle(let inner): self.init(inner)
         }
     }
@@ -698,6 +770,9 @@ enum ActionKind: String, CaseIterable, Identifiable {
         case .brushSize:   return .brushSize
         case .scroll:      return .scroll
         case .radialMenu:  return .radialMenu
+        case .mouseMode:   return .mouseMode
+        case .stabilizer:  return .stabilizer
+        case .penGestures: return .penGestures
         case .shortcut:
             if case .shortcut = previous { return previous }
             return .shortcut("")

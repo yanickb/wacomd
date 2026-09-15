@@ -28,6 +28,12 @@ public enum ButtonAction: Codable, Equatable, Hashable {
     case scroll
     /// While held, shows the radial menu ; releasing runs the pointed item.
     case radialMenu
+    /// While held, the pen moves the cursor relatively, like a mouse.
+    case mouseMode
+    /// While held, inverts the stroke stabilizer's default state.
+    case stabilizer
+    /// While held, quick pen flicks up / right / down / left run actions.
+    case penGestures
     case shortcut(String)
 
     public init(_ raw: String) {
@@ -48,6 +54,9 @@ public enum ButtonAction: Codable, Equatable, Hashable {
         case "eraser":       self = .eraser
         case "scroll":       self = .scroll
         case "radialmenu":   self = .radialMenu
+        case "mousemode":    self = .mouseMode
+        case "stabilizer":   self = .stabilizer
+        case "pengestures":  self = .penGestures
         default:             self = .shortcut(trimmed)
         }
     }
@@ -65,6 +74,9 @@ public enum ButtonAction: Codable, Equatable, Hashable {
         case .eraser:          return "eraser"
         case .scroll:          return "scroll"
         case .radialMenu:      return "radialMenu"
+        case .mouseMode:       return "mouseMode"
+        case .stabilizer:      return "stabilizer"
+        case .penGestures:     return "penGestures"
         case .shortcut(let s): return s
         }
     }
@@ -74,7 +86,8 @@ public enum ButtonAction: Codable, Equatable, Hashable {
     /// useless there.
     public var isHoldMode: Bool {
         switch self {
-        case .precision, .layer, .brushSize, .eraser, .scroll, .radialMenu: return true
+        case .precision, .layer, .brushSize, .eraser, .scroll, .radialMenu,
+             .mouseMode, .stabilizer, .penGestures: return true
         case .shortcut(let s):
             // Lone modifiers (`alt`) and modifier+click must be held too.
             let key = s.lowercased().split(separator: "+").last.map(String.init) ?? ""
@@ -98,6 +111,9 @@ public enum ButtonAction: Codable, Equatable, Hashable {
         case .eraser:          return "Gomme"
         case .scroll:          return "Défilement"
         case .radialMenu:      return "Menu circulaire"
+        case .mouseMode:       return "Mode souris"
+        case .stabilizer:      return "Stabilisateur"
+        case .penGestures:     return "Gestes au stylet"
         case .shortcut(let s): return Self.prettyShortcut(s)
         }
     }
@@ -248,12 +264,17 @@ public struct ButtonMap: Codable, Equatable {
         RadialItem("Clic droit", .rightClick),
     ]
 
+    /// Pen flicks while `.penGestures` is held : up, right, down, left.
+    public var penGestures: [ButtonAction] = [
+        .shortcut("cmd+="), .shortcut("cmd+shift+z"), .shortcut("cmd+-"), .shortcut("cmd+z"),
+    ]
+
     public init() {}
 
     private enum CodingKeys: String, CodingKey {
         case penLowerButton, penUpperButton, padButtons
         case layer2PenLowerButton, layer2PenUpperButton, layer2PadButtons
-        case radialMenu
+        case radialMenu, penGestures
     }
 
     public init(from decoder: Decoder) throws {
@@ -266,6 +287,7 @@ public struct ButtonMap: Codable, Equatable {
         layer2PenUpperButton = try c.decodeIfPresent(ButtonBinding.self,   forKey: .layer2PenUpperButton) ?? d.layer2PenUpperButton
         layer2PadButtons     = try c.decodeIfPresent([ButtonBinding].self, forKey: .layer2PadButtons)     ?? d.layer2PadButtons
         radialMenu           = try c.decodeIfPresent([RadialItem].self,    forKey: .radialMenu)           ?? d.radialMenu
+        penGestures          = try c.decodeIfPresent([ButtonAction].self,  forKey: .penGestures)          ?? d.penGestures
     }
 
     /// Binding of a button once the layer state is known. A button bound to
@@ -381,6 +403,8 @@ extension ButtonMap {
             RadialItem("Persp / Ortho", .shortcut("num5")),
             RadialItem("Ajouter", .shortcut("shift+a")),
         ]
+        // Views : top, right, front, left.
+        m.penGestures = [.shortcut("num7"), .shortcut("num3"), .shortcut("num1"), .shortcut("ctrl+num3")]
         return m
     }
 }

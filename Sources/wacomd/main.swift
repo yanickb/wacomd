@@ -47,6 +47,7 @@ if !axOK || imStatus == .denied {
 }
 
 let monitor = HIDMonitor()
+LiveStatus.shared.start()
 monitor.start()
 
 let signals: [Int32] = [SIGINT, SIGTERM]
