@@ -43,13 +43,28 @@ final class EventInjector {
     /// Stable identifier we reuse across proximity + point events so apps can
     /// correlate the two. macOS doesn't care what the actual value is as long
     /// as it stays the same for the lifetime of a "device session".
-    private let deviceID: Int64 = 1
+    /// Each end of the stylus is its own pointer, like with Wacom's driver :
+    /// apps such as Affinity remember one tool per pointer and restore the
+    /// pen's tool when it comes back. Point events must carry the same ID.
+    private var deviceID: Int64 { currentPointerType == .eraser ? 2 : 1 }
+
+    /// Unique per physical end : tool type in the high bits, pen serial in
+    /// the low bits (both ends share the serial).
+    private var uniqueID: Int64 { (currentToolID << 32) | currentSerial }
+
+    /// One private source for every tablet event (proximity + points), like
+    /// OpenTabletDriver / InkWand, so apps see a single coherent device.
+    private let tabletSource = CGEventSource(stateID: .privateState)
 
     /// Set to the value carried by the latest proximity-enter packet
     /// (Wacom tool ID). Reused on every subsequent point event.
     private var currentPointerType: TabletPointerType = .pen
     private var currentToolID: Int64 = 0x802  // default = Grip Pen
     private var currentSerial: Int64 = 0
+    /// Identity from the latest proximity packet, applied by `update()` once
+    /// the previous tool's exit has been posted.
+    private var pendingToolID: Int64 = 0x802
+    private var pendingSerial: Int64 = 0
 
     /// Mask of all capabilities our driver actually populates.
     private static let capabilityMask: TabletCapabilities = [
@@ -80,6 +95,8 @@ final class EventInjector {
         let desiredPointerType: TabletPointerType = state.eraser ? .eraser : .pen
         if !lastInRange {
             currentPointerType = desiredPointerType
+            currentToolID = pendingToolID
+            currentSerial = pendingSerial
             postProximityEvent(entering: true, model: model)
             lastInRange = true
         } else if desiredPointerType != currentPointerType {
@@ -89,6 +106,8 @@ final class EventInjector {
             // crayon et gomme correctement.
             postProximityEvent(entering: false, model: model)
             currentPointerType = desiredPointerType
+            currentToolID = pendingToolID
+            currentSerial = pendingSerial
             postProximityEvent(entering: true, model: model)
         }
 
@@ -124,19 +143,37 @@ final class EventInjector {
     /// Called by `WacomDevice` when a proximity-enter packet is parsed, so
     /// we can carry the real Wacom tool ID into the subsequent CGEvents.
     func updateToolIdentity(toolID: UInt32, serial: UInt64, isEraser: Bool) {
-        self.currentToolID = Int64(toolID & 0xFFFF)  // vendor pointer type (16-bit)
-        self.currentSerial = Int64(bitPattern: UInt64(serial & 0xFFFFFFFF))
-        self.currentPointerType = isEraser ? .eraser : .pen
+        self.pendingToolID = Int64(toolID & 0xFFFF)  // vendor pointer type (16-bit)
+        self.pendingSerial = Int64(bitPattern: UInt64(serial & 0xFFFFFFFF))
+        // `currentPointerType` is switched by `update()`, which needs the old
+        // value to post the exit of the previous tool before the new enter.
     }
 
     // MARK: - Tablet proximity event
 
+    /// Posts proximity in both forms apps listen to : a standalone
+    /// `.tabletProximity` event, and a mouse event with subtype
+    /// tabletProximity (TabletMagic, InkWand and OpenTabletDriver do the
+    /// same — some apps, Affinity among them, only react to one of them).
     private func postProximityEvent(entering: Bool, model: WacomModel) {
-        // `CGEvent(source:)` returns a "null" event. We then promote it to
-        // a tablet-proximity event by overwriting its `type` property.
-        guard let evt = CGEvent(source: nil) else { return }
-        evt.type = .tabletProximity
+        if let evt = CGEvent(source: tabletSource) {
+            evt.type = .tabletProximity
+            fillProximityFields(evt, entering: entering, model: model)
+            evt.post(tap: .cghidEventTap)
+        }
+        if let evt = CGEvent(mouseEventSource: tabletSource, mouseType: .mouseMoved,
+                             mouseCursorPosition: currentCursorPosition(),
+                             mouseButton: .left) {
+            // The subtype must be set before the proximity fields, which
+            // share storage with the tablet-point fields.
+            evt.setIntegerValueField(.mouseEventSubtype, value: 2)  // NSEventSubtype.tabletProximity
+            fillProximityFields(evt, entering: entering, model: model)
+            evt.post(tap: .cghidEventTap)
+        }
+        Verbose.log("proximity \(entering ? "ENTER" : "LEAVE") posted (deviceID=\(deviceID), pointerType=\(currentPointerType))")
+    }
 
+    private func fillProximityFields(_ evt: CGEvent, entering: Bool, model: WacomModel) {
         evt.setIntegerValueField(.tabletProximityEventVendorID,
                                  value: Int64(model.vendorID))
         evt.setIntegerValueField(.tabletProximityEventTabletID,
@@ -151,16 +188,13 @@ final class EventInjector {
         evt.setIntegerValueField(.tabletProximityEventVendorPointerSerialNumber,
                                  value: currentSerial)
         evt.setIntegerValueField(.tabletProximityEventVendorUniqueID,
-                                 value: currentSerial)
+                                 value: uniqueID)
         evt.setIntegerValueField(.tabletProximityEventCapabilityMask,
                                  value: Self.capabilityMask.rawValue)
         evt.setIntegerValueField(.tabletProximityEventPointerType,
                                  value: currentPointerType.rawValue)
         evt.setIntegerValueField(.tabletProximityEventEnterProximity,
                                  value: entering ? 1 : 0)
-
-        evt.post(tap: .cghidEventTap)
-        Verbose.log("proximity \(entering ? "ENTER" : "LEAVE") posted (deviceID=\(deviceID), pointerType=\(currentPointerType))")
     }
 
     // MARK: - Mouse + tablet point event
@@ -169,10 +203,39 @@ final class EventInjector {
         let normX = clamp(state.x / model.maxX, 0, 1)
         let normY = clamp(state.y / model.maxY, 0, 1)
 
-        let primary = NSScreen.screens.first ?? NSScreen.main
-        let width = primary?.frame.width ?? 1920
-        let height = primary?.frame.height ?? 1080
-        return CGPoint(x: normX * width, y: normY * height)
+        let displays = Self.displays()
+        let r = displays.isEmpty
+            ? CGRect(x: 0, y: 0, width: 1920, height: 1080)
+            : displays[displayIndex % displays.count]
+        return CGPoint(x: r.minX + normX * r.width, y: r.minY + normY * r.height)
+    }
+
+    // MARK: - Display toggle
+
+    /// Index into `displays()` the tablet is mapped to (0 = main display).
+    private var displayIndex = 0
+
+    /// Map the tablet to the next display (Wacom's "Display Toggle").
+    func cycleDisplay() {
+        let count = Self.displays().count
+        displayIndex = count > 0 ? (displayIndex + 1) % count : 0
+        print("[wacomd] Écran \(displayIndex + 1)/\(count) (ExpressKey)")
+    }
+
+    /// Active, non-mirrored displays in global coordinates (top-left origin):
+    /// the main display first, then the others from left to right.
+    static func displays() -> [CGRect] {
+        var ids = [CGDirectDisplayID](repeating: 0, count: 16)
+        var count: UInt32 = 0
+        guard CGGetActiveDisplayList(UInt32(ids.count), &ids, &count) == .success else { return [] }
+        let main = CGMainDisplayID()
+        return ids.prefix(Int(count))
+            .filter { CGDisplayMirrorsDisplay($0) == kCGNullDirectDisplay }
+            .sorted { a, b in
+                if a == main || b == main { return a == main }
+                return CGDisplayBounds(a).minX < CGDisplayBounds(b).minX
+            }
+            .map { CGDisplayBounds($0) }
     }
 
     private func postMouseEvent(
@@ -183,7 +246,7 @@ final class EventInjector {
         button: CGMouseButton = .left
     ) {
         guard let evt = CGEvent(
-            mouseEventSource: nil,
+            mouseEventSource: tabletSource,
             mouseType: type,
             mouseCursorPosition: point,
             mouseButton: button
@@ -350,9 +413,11 @@ final class EventInjector {
 
     private func tabletButtonsMask(state: PenState) -> Int64 {
         var mask: Int64 = 0
+        // The eraser is a tool (announced by proximity), not a button :
+        // its contact is reported as the tip, like the other drivers do.
+        // 0x04 would be read as a third button (e.g. middle click in Qt).
         if state.tipDown      { mask |= 0x01 }
         if state.barrelButton { mask |= 0x02 }
-        if state.eraser       { mask |= 0x04 }
         return mask
     }
 

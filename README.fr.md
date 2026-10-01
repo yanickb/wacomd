@@ -49,8 +49,8 @@ ou [Hawku](https://github.com/poiuyt9876/hawku-userspace).
 | Bouton barillet → clic droit                  | ✅                 |
 | Inclinaison X/Y                               | ✅ (transmise)     |
 | Gomme                                         | ✅ (état signalé)  |
-| Multi-écran (mapping configurable)            | ❌ écran principal |
-| ExpressKeys (6 touches du pad)                | ❌ TODO            |
+| Multi-écran (bascule par ExpressKey)          | ✅                 |
+| ExpressKeys (6 touches du pad)                | ✅ configurables   |
 | Touch Ring                                    | ❌ TODO            |
 | Surface multi-touch                           | ❌ TODO            |
 | Interface graphique de configuration          | ❌ TODO            |
@@ -253,9 +253,9 @@ hex de chaque rapport brut, et un compteur de débit toutes les 5 s.
 
 ## Pistes pour étendre
 
-- **ExpressKeys / Touch Ring** : la 3e interface (page `0xff0d`, rapports
-  d'ID 12) porte les données du pad. Parser d'après `wacom_intuos_pad` dans
-  `drivers/hid/wacom_wac.c`.
+- **Touch Ring** : déjà décodé (interface stylet `0xff0d`, Report ID 3,
+  octet 2 — voir la section ExpressKeys du README anglais), reste à le
+  lier à une action (scroll, zoom…).
 - **Surface multi-touch** : 2e interface, rapports d'ID 13.
 - **Aire active / mapping écran** : ajouter un fichier `~/.config/wacomd.toml`
   lu au démarrage pour configurer écran cible, zone active, ratio d'aspect.

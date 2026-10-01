@@ -38,44 +38,15 @@ enum IntuosProParser {
     /// Tente de décoder un rapport. Retourne `.ignored` si le rapport ne nous
     /// concerne pas (rapport pad, statut batterie, etc.).
     static func decode(reportID: UInt32, data: UnsafeMutablePointer<UInt8>, length: Int) -> Result {
-        // ---- Cas 1 : proximité Report ID 192 (0xc0) ----------------------
+        // ---- Report ID 192 (0xc0) : statut, pas de proximité -------------
         //
-        // Sur le firmware de la PTH-451, l'entrée et la sortie de proximité
-        // arrivent SUR LEUR PROPRE Report ID (0xc0), pas multiplexées dans
-        // Report ID 2 comme dans le pilote Linux. Le payload est :
-        //
-        //   buf[0] = 0xc0 (Report ID echoé)
-        //   buf[1..9] = données outil
-        //
-        // On applique la formule Linux `wacom_intuos_inout` en décalant
-        // les indices d'une position (puisque macOS reproduit le Report ID
-        // au début du payload).
-        if reportID == 192, length >= 10 {
-            let d = data
-
-            // Linux : data[2..3] et data[7..8] composent l'ID outil ;
-            //         data[3..7] composent le numéro de série.
-            // Avec notre décalage : on prend buf[1..2] et buf[6..7] pour l'ID,
-            // buf[2..6] pour le serial.
-            let toolID: UInt32 =
-                (UInt32(d[1]) << 4) |
-                (UInt32(d[2]) >> 4) |
-                (UInt32(d[6] & 0x0f) << 16) |
-                (UInt32(d[7] & 0xf0) << 8)
-
-            let serial: UInt64 =
-                (UInt64(d[2] & 0x0f) << 28) |
-                (UInt64(d[3]) << 20) |
-                (UInt64(d[4]) << 12) |
-                (UInt64(d[5]) << 4)  |
-                (UInt64(d[6]) >> 4)
-
-            // Si tous les octets significatifs sont à zéro / fixes, c'est
-            // probablement un heartbeat "session" et pas une vraie transition.
-            // On signale quand même l'entrée — `WacomDevice` fait son propre
-            // dedup en mémorisant le dernier toolID.
-            return .proximityEnter(toolID: toolID, serial: serial)
-        }
+        // C'est `WACOM_REPORT_USB` du pilote Linux (`wacom_status_irq` :
+        // connexion / batterie du kit sans fil), émis périodiquement. Le
+        // décoder comme une entrée de proximité produisait un faux outil
+        // (toolID 0x92000) qui écrasait la gomme et la repassait en stylet.
+        // Les vraies transitions de proximité arrivent dans le Report ID 2
+        // (octet de statut 0xc_ / 0x80, voir plus bas).
+        if reportID == 192 { return .ignored }
 
         // Le rapport pen est l'ID 0x02 et fait 10 octets.
         guard reportID == 2, length >= 10 else { return .ignored }

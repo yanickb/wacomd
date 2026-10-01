@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import Carbon.HIToolbox
 import WacomdShared
 
 // MARK: - Entry point
@@ -110,8 +111,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
 final class ConfigModel: ObservableObject {
     @Published var config: WacomdConfig {
-        didSet { scheduleSave() }
+        didSet { if !applyingDiskChange { scheduleSave() } }
     }
+    /// True while copying a config the daemon wrote, so it isn't saved back.
+    private var applyingDiskChange = false
     @Published private(set) var daemonRunning: Bool = false
 
     private var saveWorkItem: DispatchWorkItem?
@@ -121,7 +124,10 @@ final class ConfigModel: ObservableObject {
         self.config = ConfigStore.shared.current
         refreshDaemonStatus()
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            DispatchQueue.main.async { self?.refreshDaemonStatus() }
+            DispatchQueue.main.async {
+                self?.refreshDaemonStatus()
+                self?.syncFromDisk()
+            }
         }
     }
 
@@ -129,10 +135,22 @@ final class ConfigModel: ObservableObject {
         daemonRunning = (DaemonControl.runningPID() != nil)
     }
 
+    /// The daemon persists `touchEnabled` when an ExpressKey toggles it ;
+    /// mirror that here, unless a local edit is still waiting to be saved.
+    func syncFromDisk() {
+        guard saveWorkItem == nil else { return }
+        let onDisk = ConfigStore.shared.readFromDisk()
+        guard onDisk != config else { return }
+        applyingDiskChange = true
+        config = onDisk
+        applyingDiskChange = false
+    }
+
     private func scheduleSave() {
         saveWorkItem?.cancel()
         let snapshot = config
-        let work = DispatchWorkItem {
+        let work = DispatchWorkItem { [weak self] in
+            self?.saveWorkItem = nil
             if ConfigStore.shared.save(snapshot) {
                 DaemonControl.sendReloadSignal()
             }
@@ -165,10 +183,15 @@ struct ConfigView: View {
                 .disabled(!model.config.touchEnabled)
                 .opacity(model.config.touchEnabled ? 1.0 : 0.45)
             Divider()
+            ExpressKeysSection(model: model)
+            Divider()
             footer
         }
         .padding(14)
         .frame(width: 320)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .scrollableIfNeeded()
     }
 
     private var header: some View {
@@ -272,5 +295,148 @@ struct ConfigView: View {
             Button("Quitter") { NSApplication.shared.terminate(nil) }
                 .controlSize(.small)
         }
+    }
+}
+
+private extension View {
+    func scrollableIfNeeded() -> some View {
+        ScrollView(.vertical) { self }
+    }
+}
+
+// MARK: - ExpressKeys
+
+struct ExpressKeysSection: View {
+    @ObservedObject var model: ConfigModel
+    /// Index of the key whose shortcut is being recorded, if any.
+    @State private var recording: Int?
+    @State private var monitor: Any?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "keyboard")
+                Text("ExpressKeys").font(.headline)
+            }
+            ForEach(0..<6, id: \.self) { i in
+                row(i)
+            }
+        }
+        .onDisappear(perform: stopRecording)
+    }
+
+    private func binding(_ i: Int) -> Binding<ExpressKeyBinding> {
+        Binding(
+            get: { i < model.config.expressKeys.count ? model.config.expressKeys[i] : ExpressKeyBinding() },
+            set: { newValue in
+                var keys = model.config.expressKeys
+                while keys.count <= i { keys.append(ExpressKeyBinding()) }
+                keys[i] = newValue
+                model.config.expressKeys = keys
+            }
+        )
+    }
+
+    private func row(_ i: Int) -> some View {
+        let b = binding(i)
+        return VStack(alignment: .leading, spacing: 2) {
+            Picker("Touche \(i + 1)", selection: b.action) {
+                Text("Aucune").tag(ExpressKeyBinding.Action.none)
+                Text("Activer/désactiver le tactile").tag(ExpressKeyBinding.Action.toggleTouch)
+                Text("Écran suivant").tag(ExpressKeyBinding.Action.cycleDisplay)
+                Text("Raccourci clavier").tag(ExpressKeyBinding.Action.keyCombo)
+            }
+            .font(.caption)
+            if b.wrappedValue.action == .keyCombo {
+                HStack {
+                    Spacer()
+                    Button(recording == i ? "Appuyez sur un raccourci… (Échap annule)"
+                                          : KeyLabel.describe(b.wrappedValue)) {
+                        recording == i ? stopRecording() : startRecording(i)
+                    }
+                    .controlSize(.small)
+                }
+            }
+        }
+    }
+
+    private func startRecording(_ i: Int) {
+        stopRecording()
+        recording = i
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if Int(event.keyCode) != kVK_Escape {
+                var b = binding(i).wrappedValue
+                b.keyCode = Int(event.keyCode)
+                b.modifiers = KeyLabel.modifierNames(event.modifierFlags)
+                binding(i).wrappedValue = b
+            }
+            stopRecording()
+            return nil   // swallow the key so it doesn't trigger anything else
+        }
+    }
+
+    private func stopRecording() {
+        if let m = monitor { NSEvent.removeMonitor(m) }
+        monitor = nil
+        recording = nil
+    }
+}
+
+/// Human-readable shortcut labels (⌃⌥⇧⌘ + key) for the configurator.
+enum KeyLabel {
+    static func modifierNames(_ flags: NSEvent.ModifierFlags) -> [String] {
+        var names: [String] = []
+        if flags.contains(.control) { names.append("ctrl") }
+        if flags.contains(.option)  { names.append("option") }
+        if flags.contains(.shift)   { names.append("shift") }
+        if flags.contains(.command) { names.append("cmd") }
+        return names
+    }
+
+    static func describe(_ binding: ExpressKeyBinding) -> String {
+        guard let keyCode = binding.keyCode else { return "Enregistrer…" }
+        let mods = binding.modifiers ?? []
+        let symbols: [(String, String)] = [("ctrl", "⌃"), ("option", "⌥"), ("shift", "⇧"), ("cmd", "⌘")]
+        let prefix = symbols.filter { s in mods.contains { aliases($0) == s.0 } }.map(\.1).joined()
+        return prefix + keyName(keyCode)
+    }
+
+    private static func aliases(_ m: String) -> String {
+        switch m.lowercased() {
+        case "command": return "cmd"
+        case "alt":     return "option"
+        case "control": return "ctrl"
+        default:        return m.lowercased()
+        }
+    }
+
+    private static let special: [Int: String] = [
+        kVK_Return: "↩", kVK_Tab: "⇥", kVK_Space: "Espace", kVK_Delete: "⌫",
+        kVK_ForwardDelete: "⌦", kVK_Escape: "⎋", kVK_LeftArrow: "←",
+        kVK_RightArrow: "→", kVK_DownArrow: "↓", kVK_UpArrow: "↑",
+        kVK_Home: "↖", kVK_End: "↘", kVK_PageUp: "⇞", kVK_PageDown: "⇟",
+        kVK_F1: "F1", kVK_F2: "F2", kVK_F3: "F3", kVK_F4: "F4", kVK_F5: "F5",
+        kVK_F6: "F6", kVK_F7: "F7", kVK_F8: "F8", kVK_F9: "F9", kVK_F10: "F10",
+        kVK_F11: "F11", kVK_F12: "F12",
+    ]
+
+    /// Character the key produces on the current keyboard layout.
+    private static func keyName(_ keyCode: Int) -> String {
+        if let s = special[keyCode] { return s }
+        guard let source = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
+              let ptr = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData)
+        else { return "#\(keyCode)" }
+        let data = Unmanaged<CFData>.fromOpaque(ptr).takeUnretainedValue() as Data
+        var deadKeys: UInt32 = 0
+        var chars = [UniChar](repeating: 0, count: 4)
+        var length = 0
+        let status = data.withUnsafeBytes { raw -> OSStatus in
+            let layout = raw.bindMemory(to: UCKeyboardLayout.self).baseAddress!
+            return UCKeyTranslate(layout, UInt16(keyCode), UInt16(kUCKeyActionDisplay), 0,
+                                  UInt32(LMGetKbdType()), OptionBits(kUCKeyTranslateNoDeadKeysBit),
+                                  &deadKeys, chars.count, &length, &chars)
+        }
+        guard status == noErr, length > 0 else { return "#\(keyCode)" }
+        return String(utf16CodeUnits: chars, count: length).uppercased()
     }
 }

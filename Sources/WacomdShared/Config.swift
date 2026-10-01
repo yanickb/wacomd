@@ -36,6 +36,11 @@ public struct WacomdConfig: Codable, Equatable {
     /// looser and slow short cursor movements get hijacked as taps.
     public var tapMaxRawMovement: Double = 25
 
+    // ---- ExpressKeys --------------------------------------------------------
+    /// One binding per ExpressKey, top → bottom. Missing entries act as `none`.
+    public var expressKeys: [ExpressKeyBinding] =
+        Array(repeating: ExpressKeyBinding(), count: 6)
+
     public init() {}
 
     /// Custom decoder so adding new fields doesn't reject existing config
@@ -46,6 +51,7 @@ public struct WacomdConfig: Codable, Equatable {
         case naturalScroll
         case cursorSensitivity, scrollSensitivity, threeFingerSwipeThreshold
         case tapMaxDurationMs, tapMaxRawMovement
+        case expressKeys
     }
 
     public init(from decoder: Decoder) throws {
@@ -62,6 +68,7 @@ public struct WacomdConfig: Codable, Equatable {
         self.threeFingerSwipeThreshold = try c.decodeIfPresent(Double.self, forKey: .threeFingerSwipeThreshold) ?? d.threeFingerSwipeThreshold
         self.tapMaxDurationMs  = try c.decodeIfPresent(Int.self,    forKey: .tapMaxDurationMs)  ?? d.tapMaxDurationMs
         self.tapMaxRawMovement = try c.decodeIfPresent(Double.self, forKey: .tapMaxRawMovement) ?? d.tapMaxRawMovement
+        self.expressKeys       = try c.decodeIfPresent([ExpressKeyBinding].self, forKey: .expressKeys) ?? d.expressKeys
     }
 
     // ---- Where the config lives ------------------------------------------
@@ -70,6 +77,36 @@ public struct WacomdConfig: Codable, Equatable {
         return home
             .appendingPathComponent("Library/Application Support/wacomd")
             .appendingPathComponent("config.json")
+    }
+}
+
+/// What an ExpressKey does when pressed. Example `config.json` entries:
+///
+///     { "action" : "toggleTouch" }
+///     { "action" : "cycleDisplay" }
+///     { "action" : "keyCombo", "keyCode" : 6, "modifiers" : ["cmd"] }   // Cmd+Z
+///     { "action" : "none" }
+///
+/// `keyCode` is a macOS virtual key code (kVK_*); `modifiers` accepts
+/// "cmd", "shift", "option" / "alt", "ctrl".
+public struct ExpressKeyBinding: Codable, Equatable {
+    public enum Action: String, Codable {
+        case none
+        /// Flip `touchEnabled` (and persist it, so the configurator sees it).
+        case toggleTouch
+        /// Map the tablet to the next display (Wacom's "Display Toggle").
+        case cycleDisplay
+        case keyCombo
+    }
+
+    public var action: Action
+    public var keyCode: Int?
+    public var modifiers: [String]?
+
+    public init(action: Action = .none, keyCode: Int? = nil, modifiers: [String]? = nil) {
+        self.action = action
+        self.keyCode = keyCode
+        self.modifiers = modifiers
     }
 }
 
@@ -98,6 +135,13 @@ public final class ConfigStore {
         print("[wacomd] Config rechargée depuis \(path.path)")
         print("[wacomd]   cursor=\(_current.cursorSensitivity) scroll=\(_current.scrollSensitivity)")
         print("[wacomd]   1f=\(_current.oneFingerCursor) 2f=\(_current.twoFingerScroll) 3f=\(_current.threeFingerSwipes) tap=\(_current.tapToClick)")
+    }
+
+    /// Re-read the file silently and return it. Used by the configurator to
+    /// pick up changes made by the daemon (e.g. an ExpressKey toggling touch).
+    public func readFromDisk() -> WacomdConfig {
+        loadFromDisk()
+        return current
     }
 
     /// Write a fresh config to disk. Returns false if the write failed.

@@ -1,5 +1,7 @@
 import Foundation
 import IOKit.hid
+import CoreGraphics
+import WacomdShared
 
 /// Page HID *vendor-defined* utilisée par les Intuos Pro pour l'interface du
 /// stylet. Tous les rapports pen (X/Y/pression/tilt) arrivent ici, en raw.
@@ -8,6 +10,24 @@ private let wacomDigitizerUsagePage = 0xff0d
 /// Page HID vendor pour l'interface tactile (multi-touch surface).
 /// Rapports Report ID 2 de longueur 64 quand des doigts sont en contact.
 private let wacomTouchUsagePage = 0xff00
+
+/// Pen proximity shared across the tablet's HID interfaces (pen and touch
+/// are separate `WacomDevice`s). All callbacks run on the main run loop.
+enum PenProximity {
+    private static var inRange = false
+    private static var leftAt: CFAbsoluteTime = 0
+    /// Keep rejecting touch briefly after the pen leaves, while the palm lifts.
+    private static let grace: CFAbsoluteTime = 0.5
+
+    static var isActive: Bool {
+        inRange || CFAbsoluteTimeGetCurrent() - leftAt < grace
+    }
+
+    static func update(inRange now: Bool) {
+        if inRange && !now { leftAt = CFAbsoluteTimeGetCurrent() }
+        inRange = now
+    }
+}
 
 final class WacomDevice {
     private let device: IOHIDDevice
@@ -25,6 +45,10 @@ final class WacomDevice {
     /// periodically even when no tool transition happens.
     private var lastSeenToolID: UInt32 = 0
     private var lastSeenSerial: UInt64 = 0
+    /// Last pad report, used to fire ExpressKey actions on press edges only.
+    private var lastPad = IntuosProPadParser.PadSample(keys: 0, keysTouched: 0,
+                                                        ringCenterButton: false,
+                                                        ringPosition: nil)
 
     var modelName: String { model.name }
 
@@ -145,10 +169,15 @@ final class WacomDevice {
         // Pen interface (0xff0d) and touch interface (0xff00) both pass.
         guard isPenInterface || isTouchInterface else { return }
 
-        if isPenInterface {
+        if isPenInterface, let pad = IntuosProPadParser.decode(reportID: id, data: report,
+                                                                length: Int(length)) {
+            // The pad (ExpressKeys + Touch Ring) shares the pen interface
+            // on Report ID 3.
+            handlePad(pad)
+        } else if isPenInterface {
             // Pen interface only emits Report ID 2 with length 10 for
-            // movement and ID 192 (0xc0) for proximity transitions.
-            // We route both into the pen parser.
+            // movement and proximity transitions (ID 192 is a status
+            // heartbeat that the parser ignores).
             handlePenReport(data: report, length: Int(length), id: id)
         } else if isTouchInterface {
             // Touch interface also uses Report ID 2 but with length 64.
@@ -164,6 +193,7 @@ final class WacomDevice {
         case .ignored:
             return
         case .proximityLeave:
+            PenProximity.update(inRange: false)
             state.inRange = false
             state.tipDown = false
             state.barrelButton = false
@@ -185,6 +215,7 @@ final class WacomDevice {
             let lowNibble = toolID & 0x00f
             let isEraser = (lowNibble == 0xa) || (lowNibble == 0xb) || (lowNibble == 0xc)
 
+            PenProximity.update(inRange: true)
             state.inRange = true
             state.eraser = isEraser
             injector.updateToolIdentity(toolID: toolID, serial: serial, isEraser: isEraser)
@@ -194,6 +225,7 @@ final class WacomDevice {
                                    toolID, serial, isEraser ? "OUI" : "non"))
             }
         case .pen(let sample):
+            PenProximity.update(inRange: true)
             state.x = Double(sample.x)
             state.y = Double(sample.y)
             state.pressure = min(1.0, max(0.0, Double(sample.pressure) / model.maxPressure))
@@ -204,6 +236,55 @@ final class WacomDevice {
             state.barrelButton = sample.barrelButton1 || sample.barrelButton2
             injector.update(state: state, model: model)
         }
+    }
+
+    // MARK: - Pad (ExpressKeys)
+
+    private func handlePad(_ pad: IntuosProPadParser.PadSample) {
+        defer { lastPad = pad }
+        if pad.ringPosition != lastPad.ringPosition || pad.ringCenterButton != lastPad.ringCenterButton {
+            Verbose.log("ring position=\(pad.ringPosition.map(String.init) ?? "-") center=\(pad.ringCenterButton)")
+        }
+
+        let bindings = ConfigStore.shared.current.expressKeys
+        for i in 0..<IntuosProPadParser.expressKeyCount
+        where pad.isPressed(key: i) && !lastPad.isPressed(key: i) {
+            let binding = i < bindings.count ? bindings[i] : ExpressKeyBinding()
+            Verbose.log("ExpressKey \(i + 1) → \(binding.action.rawValue)")
+            perform(binding)
+        }
+    }
+
+    private func perform(_ binding: ExpressKeyBinding) {
+        switch binding.action {
+        case .none:
+            return
+        case .toggleTouch:
+            var config = ConfigStore.shared.current
+            config.touchEnabled.toggle()
+            ConfigStore.shared.save(config)
+            print("[wacomd] Touch \(config.touchEnabled ? "activé" : "désactivé") (ExpressKey)")
+        case .cycleDisplay:
+            injector.cycleDisplay()
+        case .keyCombo:
+            guard let keyCode = binding.keyCode else { return }
+            injector.postKeyCombo(keyCode: CGKeyCode(keyCode),
+                                  modifiers: Self.eventFlags(binding.modifiers ?? []))
+        }
+    }
+
+    static func eventFlags(_ modifiers: [String]) -> CGEventFlags {
+        var flags: CGEventFlags = []
+        for m in modifiers {
+            switch m.lowercased() {
+            case "cmd", "command":   flags.insert(.maskCommand)
+            case "shift":            flags.insert(.maskShift)
+            case "option", "alt":    flags.insert(.maskAlternate)
+            case "ctrl", "control":  flags.insert(.maskControl)
+            default: break
+            }
+        }
+        return flags
     }
 
     // MARK: - Évènements HID structurés (utilisés si Apple décode quelque chose)

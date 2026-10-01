@@ -87,7 +87,10 @@ final class TouchTracker {
         // Master switch — when touch is disabled in the config we drop the
         // frame entirely AND flush all per-touch state so that re-enabling
         // it later doesn't replay a stale gesture.
-        if !ConfigStore.shared.current.touchEnabled {
+        // Palm rejection : like Wacom's driver, ignore touch while the pen
+        // is near the tablet, so a resting hand can't move the cursor (a
+        // plain mouse event mid-stroke paints a full-pressure dot).
+        if !ConfigStore.shared.current.touchEnabled || PenProximity.isActive {
             if !touches.isEmpty || scrollSmoothedCentroid != nil
                || cursorAccumDx != 0 || cursorAccumDy != 0 {
                 touches.removeAll()

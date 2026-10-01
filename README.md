@@ -37,15 +37,9 @@ pressure / touch events into the system event tap. Same approach as
 
 The following are **not supported and won't be in the v0.x line** :
 
-- ❌ The 6 **ExpressKeys** (the pad buttons on the side of the tablet)
-- ❌ The **Touch Ring** (the wheel)
+- ❌ The **Touch Ring** (the wheel) — its data is decoded but not bound to any action yet
 - ❌ Multi-touch gestures beyond **2-finger scroll** (pinch / rotate / 3-finger
   swipe require private SPI and are out of scope)
-
-The pad (ExpressKeys + Touch Ring) is a structural blocker, not a missing
-feature — see [Known limitation : the pad](#known-limitation--the-pad-expresskeys--touch-ring)
-below. If your workflow depends on the ExpressKeys, this driver is not for
-you, full stop.
 
 ## 🛑 If you have the official Wacom driver installed: disable it first
 
@@ -81,8 +75,8 @@ framework. Restore later with :
 | Tilt X / Y                                       | ✅     |
 | Eraser flag                                      | ✅ (signalled) |
 | **2-finger touch scroll**                        | ✅ **new** |
-| Multi-monitor configurable mapping               | ❌ primary screen |
-| ExpressKeys (6 buttons)                          | ❌ TODO v0.4 |
+| Multi-monitor (ExpressKey display toggle)        | ✅ |
+| ExpressKeys (6 buttons)                          | ✅ configurable |
 | Touch Ring                                       | ❌ TODO v0.5 |
 | Multi-touch gestures (pinch / rotate)            | ❌ private SPI required |
 | Configuration UI                                 | ❌ TODO |
@@ -96,7 +90,7 @@ The Intuos Pro Small (PTH-451, 2013) is a fantastic piece of hardware that
 Wacom quietly stopped supporting on recent macOS. Their current driver
 installer either refuses to recognise the device, or installs but produces no
 events. This project is a 700-line drop-in replacement that handles pen input
-properly. ExpressKeys and the Touch Ring are next on the list.
+properly. The Touch Ring is next on the list.
 
 ## Build
 
@@ -291,26 +285,38 @@ Adding them is just a matter of registering the new VID/PID in
 - Bluetooth variants (PTH-451 has a wireless kit)
 - Configuration UI (menu bar)
 
-## Known limitation : the pad (ExpressKeys + Touch Ring)
+## ExpressKeys
 
-macOS only enumerates **three HID interfaces** for the PTH-451 :
-`page=0xff0d` (pen), `page=0xff00` (touch surface + status), and
-`page=0x01 usage=0x02` (mouse fallback). There is **no fourth HID
-interface for the pad**.
+The pad has no HID interface of its own : its reports arrive on the **pen
+interface** (`page=0xff0d`) with **Report ID 3**, 10 bytes long — the same
+layout as `wacom_intuos_pad` in Linux :
 
-The pad's 6 ExpressKeys and Touch Ring communicate with their host driver
-through a vendor-specific USB endpoint that the kernel HID family doesn't
-expose to userspace. The official Wacom driver speaks to that endpoint
-directly via custom kernel code; without it (and without re-implementing
-that custom path), the pad data is simply not reachable from a HID-based
-userspace daemon.
+| Byte | Meaning |
+|------|---------|
+| `buf[2]` | Touch Ring : bit 7 = finger on ring, bits 0–6 = position |
+| `buf[3]` | bit 0 = Touch Ring centre button |
+| `buf[4]` | ExpressKeys pressed, bit n = key n+1 (top → bottom) |
+| `buf[5]` | ExpressKeys touched (capacitive), same layout |
 
-Supporting the pad would require dropping IOHIDManager for the pad
-interface and switching to `IOUSBLib` for direct USB control / bulk
-transfers, plus reverse-engineering the per-firmware polling format.
-That's ~2-3 days of focused R&D and the format isn't documented in the
-Linux Wacom driver either — the kernel handles each Wacom family with
-ad-hoc code. PRs welcome but it's a real project, not a small patch.
+Each key is bound in `config.json` (or from **Wacomd Config.app**), and the
+binding fires on press :
+
+```json
+"expressKeys" : [
+  { "action" : "toggleTouch" },
+  { "action" : "cycleDisplay" },
+  { "action" : "keyCombo", "keyCode" : 6, "modifiers" : ["cmd"] },
+  { "action" : "none" }
+]
+```
+
+- `toggleTouch` flips `touchEnabled` and saves it, so the configurator stays in sync.
+- `cycleDisplay` maps the tablet to the next display (main display first, then
+  left to right), like Wacom's *Display Toggle*. The pen still starts on the
+  main display when the daemon launches.
+- `keyCombo` posts a shortcut : `keyCode` is a macOS virtual key code (`kVK_*`),
+  `modifiers` accepts `cmd`, `shift`, `option`, `ctrl`.
+- Missing entries default to `none`.
 
 ## Contributing
 

@@ -77,4 +77,20 @@ final class IntuosProParserTests: XCTestCase {
             return XCTFail("attendu .ignored")
         }
     }
+
+    func testStatusHeartbeatIsNotAProximityEvent() {
+        // Periodic report 0xc0 captured with the eraser in range; it used to
+        // be decoded as tool 0x92000 and flip the eraser back to a pen.
+        guard case .ignored = decode([0xc0, 0x00, 0x00, 0x01, 0x10, 0xe6, 0x29, 0x2e, 0x9e, 0x03]) else {
+            return XCTFail("report 0xc0 must be ignored")
+        }
+    }
+
+    func testEraserProximityIsDetectedOnReport2() {
+        //   02 c2 80 a4 c8 0c bb 41 00 00  → eraser end entering proximity
+        guard case .proximityEnter(let toolID, _) = decode([0x02, 0xc2, 0x80, 0xa4, 0xc8, 0x0c, 0xbb, 0x41, 0x00, 0x00]) else {
+            return XCTFail("attendu .proximityEnter")
+        }
+        XCTAssertEqual(toolID & 0x00f, 0xa, "low nibble 0xa = eraser")
+    }
 }
