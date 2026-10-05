@@ -675,7 +675,7 @@ final class EventInjector {
         Hud.shared.hideRadial()
         Hud.shared.clearModes()
         Handwriting.shared.finishNow()
-        Verbose.log("état remis à zéro (tablette déconnectée)")
+        Verbose.log("état remis à zéro")
     }
 
     /// Called by `WacomDevice` when a proximity-enter packet is parsed, so
