@@ -77,8 +77,9 @@ enum IntuosProParser {
             return .proximityEnter(toolID: toolID, serial: serial)
         }
 
-        // Le rapport pen est l'ID 0x02 et fait 10 octets.
-        guard reportID == 2, length >= 10 else { return .ignored }
+        // Le rapport pen fait 10 octets : ID 0x02 sur les Intuos Pro, ID 0x10
+        // (WACOM_REPORT_INTUOS_PEN) sur les Intuos S/M 2 (CTL-490…), même format.
+        guard reportID == 2 || reportID == 16, length >= 10 else { return .ignored }
 
         let d = data
         let status = d[1]

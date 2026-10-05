@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import IOKit
 import IOKit.hid
@@ -5,6 +6,9 @@ import IOKit.hid
 final class HIDMonitor {
     private var manager: IOHIDManager!
     private var devices: [IOHIDDevice: WacomDevice] = [:]
+    /// One injector for all interfaces (pen, pad/touch) so held modes and
+    /// held mouse buttons are shared between them.
+    private let injector = EventInjector()
 
     static let wacomVendorID = 0x056a
 
@@ -33,6 +37,8 @@ final class HIDMonitor {
 
         IOHIDManagerScheduleWithRunLoop(manager, CFRunLoopGetMain(), CFRunLoopMode.defaultMode.rawValue)
 
+        observeSystemEvents()
+
         let result = IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone))
         if result != kIOReturnSuccess {
             let hex = String(format: "0x%08x", result)
@@ -42,6 +48,28 @@ final class HIDMonitor {
                     autorisez le binaire 'wacomd', puis relancez le démon.
 
                 """.utf8))
+        }
+    }
+
+    /// Sleep, screen lock and user switching also leave a latched mode with
+    /// no way out : the buttons are out of reach, or the modifier would stay
+    /// held across the lock screen.
+    private func observeSystemEvents() {
+        let workspace = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.willSleepNotification, NSWorkspace.didWakeNotification,
+                     NSWorkspace.screensDidSleepNotification, NSWorkspace.sessionDidResignActiveNotification] {
+            workspace.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
+                Verbose.log("évènement système \(note.name.rawValue) → remise à zéro")
+                self?.injector.resetState()
+            }
+        }
+        for name in ["com.apple.screenIsLocked", "com.apple.screensaver.didstart"] {
+            DistributedNotificationCenter.default().addObserver(
+                forName: Notification.Name(name), object: nil, queue: .main
+            ) { [weak self] _ in
+                Verbose.log("écran verrouillé → remise à zéro")
+                self?.injector.resetState()
+            }
         }
     }
 
@@ -69,7 +97,7 @@ final class HIDMonitor {
         // We currently open every matching interface and let the input-value
         // callback parse what it understands.
         print("[wacomd] + Connecté: \(model.name)")
-        let wacom = WacomDevice(device: device, model: model)
+        let wacom = WacomDevice(device: device, model: model, injector: injector)
         wacom.start()
         devices[device] = wacom
     }
@@ -78,5 +106,7 @@ final class HIDMonitor {
         guard let wacom = devices.removeValue(forKey: device) else { return }
         print("[wacomd] - Déconnecté: \(wacom.modelName)")
         wacom.stop()
+        // No button can release a latched mode once the tablet is gone.
+        if devices.isEmpty { injector.resetState() }
     }
 }

@@ -1,5 +1,6 @@
 import Foundation
 import IOKit.hid
+import WacomdShared
 
 /// Page HID *vendor-defined* utilisée par les Intuos Pro pour l'interface du
 /// stylet. Tous les rapports pen (X/Y/pression/tilt) arrivent ici, en raw.
@@ -25,13 +26,16 @@ final class WacomDevice {
     /// periodically even when no tool transition happens.
     private var lastSeenToolID: UInt32 = 0
     private var lastSeenSerial: UInt64 = 0
+    /// Last ExpressKey bitmask seen, to only act on transitions.
+    private var lastPadBits: UInt8 = 0
 
     var modelName: String { model.name }
 
-    init(device: IOHIDDevice, model: WacomModel) {
+    /// `injector` is shared by every interface of the tablet, so a pad key
+    /// (touch interface) can hold a mode that affects the pen interface.
+    init(device: IOHIDDevice, model: WacomModel, injector: EventInjector) {
         self.device = device
         self.model = model
-        let injector = EventInjector()
         self.injector = injector
         self.touchTracker = TouchTracker(injector: injector)
 
@@ -154,9 +158,40 @@ final class WacomDevice {
             // Touch interface also uses Report ID 2 but with length 64.
             // Disambiguation is done inside the parser by inspecting the
             // status byte.
+            if !model.padButtonMasks.isEmpty,
+               let bits = Self.padButtonBits(data: report, length: Int(length)) {
+                handlePadButtons(bits)
+                return
+            }
             let contacts = IntuosProTouchParser.decode(data: report, length: Int(length))
             touchTracker.handleFrame(contacts: contacts)
         }
+    }
+
+    // MARK: - Pad ExpressKeys
+
+    /// Linux `wacom_bpt3_touch` : `data[1] & 0x07` = number of 8-byte
+    /// messages starting at `data[2]` ; a message whose id is 0x80 carries
+    /// the ExpressKey bitmask in its second byte.
+    private static func padButtonBits(data: UnsafeMutablePointer<UInt8>, length: Int) -> UInt8? {
+        guard length >= 10, data[0] == 0x02 else { return nil }
+        let count = Int(data[1] & 0x07)
+        for i in 0..<count {
+            let offset = 2 + 8 * i
+            guard offset + 1 < length else { break }
+            if data[offset] == 0x80 { return data[offset + 1] }
+        }
+        return nil
+    }
+
+    private func handlePadButtons(_ bits: UInt8) {
+        guard bits != lastPadBits else { return }
+        for (index, mask) in model.padButtonMasks.enumerated() {
+            let pressed = (bits & mask) != 0
+            guard pressed != ((lastPadBits & mask) != 0) else { continue }
+            injector.buttonChanged(.pad(index), pressed: pressed)
+        }
+        lastPadBits = bits
     }
 
     private func handlePenReport(data: UnsafeMutablePointer<UInt8>, length: Int, id: UInt32) {
@@ -166,7 +201,8 @@ final class WacomDevice {
         case .proximityLeave:
             state.inRange = false
             state.tipDown = false
-            state.barrelButton = false
+            state.lowerButton = false
+            state.upperButton = false
             state.eraser = false
             injector.update(state: state, model: model)
         case .proximityEnter(let toolID, let serial):
@@ -196,12 +232,20 @@ final class WacomDevice {
         case .pen(let sample):
             state.x = Double(sample.x)
             state.y = Double(sample.y)
-            state.pressure = min(1.0, max(0.0, Double(sample.pressure) / model.maxPressure))
-            state.tiltX = Double(sample.tiltX)
-            state.tiltY = Double(sample.tiltY)
+            let config = ConfigStore.shared.current
+            let rawPressure = min(1.0, max(0.0, Double(sample.pressure) / model.maxPressure))
+            state.pressure = config.mappedPressure(rawPressure)
+            state.rawPressure = rawPressure
+            // Sans capteur d'inclinaison, les octets tilt valent 0 → -64 :
+            // on force 0 pour ne pas annoncer un stylet couché aux applis.
+            let hasTilt = model.maxTilt > 0
+            state.tiltX = hasTilt ? Double(sample.tiltX) : 0
+            state.tiltY = hasTilt ? Double(sample.tiltY) : 0
             state.inRange = true
-            state.tipDown = sample.tipDown
-            state.barrelButton = sample.barrelButton1 || sample.barrelButton2
+            // Under the minimum pressure the tip doesn't click at all.
+            state.tipDown = sample.tipDown && rawPressure > config.pressureMin
+            state.lowerButton = sample.barrelButton1
+            state.upperButton = sample.barrelButton2
             injector.update(state: state, model: model)
         }
     }

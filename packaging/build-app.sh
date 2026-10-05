@@ -100,9 +100,10 @@ EOF
 # ad-hoc signing for purely local development.
 SIGNING_ENV="$REPO_DIR/packaging/signing.env"
 ENTITLEMENTS="$REPO_DIR/packaging/wacomd.entitlements"
-if [ -f "$SIGNING_ENV" ]; then
-    # shellcheck disable=SC1090
-    source "$SIGNING_ENV"
+[ -f "$SIGNING_ENV" ] && source "$SIGNING_ENV"   # shellcheck disable=SC1090
+# signing.env holds the maintainer's identity : only use it when that
+# certificate is actually in this Mac's keychain.
+if [ -n "${SIGN_APP:-}" ] && security find-identity -v -p codesigning | grep -qF "$SIGN_APP"; then
     echo "==> Sign with Developer ID Application (hardened runtime)"
     # The daemon binary inside the bundle (if any) must be signed before the
     # outer bundle. Sign every Mach-O found in the bundle.
