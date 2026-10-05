@@ -59,6 +59,12 @@ final class Hud {
         refreshBubble()
     }
 
+    /// Drops every held mode (tablet unplugged).
+    func clearModes() {
+        modes.removeAll()
+        refreshBubble()
+    }
+
     /// Shows `text` for a moment.
     func flash(_ text: String) {
         flashText = text

@@ -635,6 +635,49 @@ final class EventInjector {
         }
     }
 
+    /// Unplugging the tablet must not leave a mode latched on : no button
+    /// can turn it off any more. Releases everything the driver holds.
+    func resetState() {
+        gestures.reset()
+        for (button, count) in heldMouseButtons where count > 0 {
+            heldMouseButtons[button] = 1
+            click(button, pressed: false)
+        }
+        heldMouseButtons.removeAll()
+        for (id, chord) in heldChords {
+            postKey(chord, down: false)
+            heldChords[id] = nil
+        }
+        for id in heldModifiers.keys { setModifiers(nil, for: id) }
+        heldModifiedClicks.removeAll()
+        toggledActions.removeAll()
+        layerHeld = 0
+        precisionHeld = 0
+        mouseModeHeld = 0
+        stabilizerHeld = 0
+        brushSizeHeld = 0
+        eraserHeld = 0
+        scrollHeld = 0
+        penGesturesHeld = 0
+        handwritingHeld = 0
+        handwritingStrokeOpen = false
+        radialHeld = 0
+        radialSelection = nil
+        radialItems = []
+        relativePen = nil
+        smoothedPoint = nil
+        frozenPoint = nil
+        penGestureAnchor = nil
+        scrollAnchor = nil
+        brushAnchorX = nil
+        lastLowerButton = false
+        lastUpperButton = false
+        Hud.shared.hideRadial()
+        Hud.shared.clearModes()
+        Handwriting.shared.finishNow()
+        Verbose.log("état remis à zéro (tablette déconnectée)")
+    }
+
     /// Called by `WacomDevice` when a proximity-enter packet is parsed, so
     /// we can carry the real Wacom tool ID into the subsequent CGEvents.
     func updateToolIdentity(toolID: UInt32, serial: UInt64, isEraser: Bool) {

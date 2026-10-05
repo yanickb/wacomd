@@ -81,5 +81,7 @@ final class HIDMonitor {
         guard let wacom = devices.removeValue(forKey: device) else { return }
         print("[wacomd] - Déconnecté: \(wacom.modelName)")
         wacom.stop()
+        // No button can release a latched mode once the tablet is gone.
+        if devices.isEmpty { injector.resetState() }
     }
 }

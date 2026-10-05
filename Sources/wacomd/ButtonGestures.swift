@@ -39,6 +39,12 @@ final class ButtonGestures {
         self.emit = emit
     }
 
+    /// Forgets every pending press (tablet unplugged).
+    func reset() {
+        phases.removeAll()
+        nextToken += 1
+    }
+
     func changed(id: String, pressed: Bool, doubleTap: TimeInterval, longPress: TimeInterval,
                  binding: () -> ButtonBinding) {
         if pressed {
