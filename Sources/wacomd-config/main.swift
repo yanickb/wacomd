@@ -152,8 +152,11 @@ struct ConfigView: View {
     @ObservedObject var model: ConfigModel
 
     var body: some View {
+        ScrollView {
         VStack(alignment: .leading, spacing: 12) {
             header
+            Divider()
+            penSection
             Divider()
             masterToggle
             Divider()
@@ -169,6 +172,39 @@ struct ConfigView: View {
         }
         .padding(14)
         .frame(width: 320)
+        }
+        .frame(minHeight: 500, idealHeight: 580)
+    }
+
+    private var penSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Stylet").font(.headline)
+            Picker("Mode", selection: $model.config.penMode) {
+                Text("Absolu").tag(PenPositionMode.absolute)
+                Text("Souris (relatif)").tag(PenPositionMode.relative)
+            }
+            if model.config.penMode == .relative {
+                sliderRow(label: "Sensibilité X (pt/mm)", value: $model.config.penSensitivityX,
+                          range: 1...100, format: { String(format: "%.1f", $0) })
+                sliderRow(label: "Sensibilité Y (pt/mm)", value: $model.config.penSensitivityY,
+                          range: 1...100, format: { String(format: "%.1f", $0) })
+                sliderRow(label: "Réinitialisation (ms)", value: $model.config.penRelativeResetMs,
+                          range: 25...1000, format: { String(format: "%.0f", $0) })
+            }
+            Picker("Bouton de défilement", selection: $model.config.penScrollButton) {
+                Text("Désactivé").tag(PenScrollButton.disabled)
+                Text("Inférieur").tag(PenScrollButton.lower)
+                Text("Supérieur").tag(PenScrollButton.upper)
+            }
+            if model.config.penScrollButton != .disabled {
+                sliderRow(label: "Défilement (pt/mm)", value: $model.config.penScrollSensitivity,
+                          range: 1...100, format: { String(format: "%.1f", $0) })
+                Toggle("Défilement naturel", isOn: $model.config.penScrollNatural)
+                Toggle("Appui bref : clic milieu", isOn: $model.config.penScrollTapMiddleClick)
+                Text("Maintenir et déplacer le stylet pour défiler. Relâcher sans mouvement pour un clic milieu.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
     }
 
     private var header: some View {

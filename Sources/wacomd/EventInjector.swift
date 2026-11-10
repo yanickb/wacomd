@@ -1,6 +1,7 @@
 import Foundation
 import CoreGraphics
 import AppKit
+import WacomdShared
 
 /// Capability mask attached to the tablet proximity event. Tells apps which
 /// of the tablet point fields actually carry meaningful data.
@@ -32,6 +33,12 @@ private enum TabletPointerType: Int64 {
 }
 
 final class EventInjector {
+    private var penMotion = PenMotion()
+    // Injectable event boundaries allow integration checks without posting UI input.
+    var eventPoster: (CGEvent) -> Void = { $0.post(tap: .cghidEventTap) }
+    var configProvider: () -> WacomdConfig = { ConfigStore.shared.current }
+    var cursorPositionProvider: (() -> CGPoint)?
+    var clock: () -> Double = { CFAbsoluteTimeGetCurrent() }
     private var lastTipDown: Bool = false
     private var lastBarrel: Bool = false
     private var lastInRange: Bool = false
@@ -63,19 +70,37 @@ final class EventInjector {
     // MARK: - Public API
 
     func update(state: PenState, model: WacomModel) {
-        // ---- Proximity LEAVE ---------------------------------------------
+        let config = configProvider()
+        let now = clock()
+        let motion = penMotion.update(state: state, model: model, config: config, now: now)
+        var outputState = state
+        if config.penScrollButton == .upper { outputState.barrelButton2 = false }
+        if config.penScrollButton == .lower { outputState.barrelButton1 = false }
+        if motion.buttonScrolling {
+            outputState.tipDown = false
+            outputState.pressure = 0
+        }
         if !state.inRange {
+            outputState.tipDown = false
+            outputState.pressure = 0
+            outputState.barrelButton1 = false
+            outputState.barrelButton2 = false
+            let position = currentCursorPosition()
             if lastTipDown {
-                postMouseEvent(type: .leftMouseUp, at: .zero, state: state, model: model)
-                lastTipDown = false
+                postMouseEvent(type: .leftMouseUp, at: position, state: outputState, model: model)
             }
+            if lastBarrel {
+                postMouseEvent(type: .rightMouseUp, at: position, state: outputState, model: model, button: .right)
+            }
+            lastTipDown = false
+            lastBarrel = false
             if lastInRange {
                 postProximityEvent(entering: false, model: model)
                 lastInRange = false
             }
             return
         }
-
+        guard state.x.isFinite, state.y.isFinite else { return }
         // ---- Proximity ENTER ---------------------------------------------
         let desiredPointerType: TabletPointerType = state.eraser ? .eraser : .pen
         if !lastInRange {
@@ -92,38 +117,49 @@ final class EventInjector {
             postProximityEvent(entering: true, model: model)
         }
 
-        let cgPoint = mapToScreen(state: state, model: model)
-
-        // ---- Decide mouse-event type ------------------------------------
-        let eventType: CGEventType
-        if state.tipDown && !lastTipDown {
-            eventType = .leftMouseDown
-        } else if !state.tipDown && lastTipDown {
-            eventType = .leftMouseUp
-        } else if state.tipDown {
-            eventType = .leftMouseDragged
+        let cgPoint: CGPoint
+        if motion.relative || motion.buttonScrolling {
+            let current = currentCursorPosition()
+            cgPoint = CGPoint(x: current.x + motion.delta.x, y: current.y + motion.delta.y)
         } else {
-            let now = CFAbsoluteTimeGetCurrent()
-            if now - lastPosted < throttleInterval { return }
-            lastPosted = now
-            eventType = .mouseMoved
+            cgPoint = mapToScreen(state: state, model: model)
         }
-
-        postMouseEvent(type: eventType, at: cgPoint, state: state, model: model)
-
-        // Barrel button → right click, posted as a separate transition.
-        if state.barrelButton != lastBarrel {
-            let rightType: CGEventType = state.barrelButton ? .rightMouseDown : .rightMouseUp
-            postMouseEvent(type: rightType, at: cgPoint, state: state, model: model, button: .right)
+        let tipChanged = outputState.tipDown != lastTipDown
+        let barrelChanged = outputState.barrelButton != lastBarrel
+        let eventType: CGEventType
+        if tipChanged {
+            eventType = outputState.tipDown ? .leftMouseDown : .leftMouseUp
+        } else {
+            eventType = outputState.tipDown ? .leftMouseDragged : .mouseMoved
         }
-
-        lastTipDown = state.tipDown
-        lastBarrel = state.barrelButton
+        let moves = !motion.buttonScrolling && (!motion.relative || motion.delta != .zero)
+        if tipChanged || outputState.tipDown || moves {
+            // Relative deltas must not be dropped by the absolute-mode rate
+            // limiter; button transitions must always pass it as well.
+            let throttled = eventType == .mouseMoved && !motion.relative && !barrelChanged &&
+                now - lastPosted < throttleInterval
+            if !throttled {
+                postMouseEvent(type: eventType, at: cgPoint, state: outputState, model: model,
+                               delta: motion.relative ? motion.delta : nil)
+                if eventType == .mouseMoved { lastPosted = now }
+            }
+        }
+        if barrelChanged {
+            let type: CGEventType = outputState.barrelButton ? .rightMouseDown : .rightMouseUp
+            postMouseEvent(type: type, at: cgPoint, state: outputState, model: model, button: .right)
+        }
+        if motion.scroll != .zero { scroll(dx: motion.scroll.x, dy: motion.scroll.y) }
+        if motion.middleClick { middleClick() }
+        lastTipDown = outputState.tipDown
+        lastBarrel = outputState.barrelButton
     }
 
     /// Called by `WacomDevice` when a proximity-enter packet is parsed, so
     /// we can carry the real Wacom tool ID into the subsequent CGEvents.
     func updateToolIdentity(toolID: UInt32, serial: UInt64, isEraser: Bool) {
+        if currentToolID != Int64(toolID & 0xFFFF) || currentSerial != Int64(serial & 0xFFFFFFFF) {
+            penMotion.reset()
+        }
         self.currentToolID = Int64(toolID & 0xFFFF)  // vendor pointer type (16-bit)
         self.currentSerial = Int64(bitPattern: UInt64(serial & 0xFFFFFFFF))
         self.currentPointerType = isEraser ? .eraser : .pen
@@ -159,7 +195,7 @@ final class EventInjector {
         evt.setIntegerValueField(.tabletProximityEventEnterProximity,
                                  value: entering ? 1 : 0)
 
-        evt.post(tap: .cghidEventTap)
+        eventPoster(evt)
         Verbose.log("proximity \(entering ? "ENTER" : "LEAVE") posted (deviceID=\(deviceID), pointerType=\(currentPointerType))")
     }
 
@@ -180,7 +216,8 @@ final class EventInjector {
         at point: CGPoint,
         state: PenState,
         model: WacomModel,
-        button: CGMouseButton = .left
+        button: CGMouseButton = .left,
+        delta: CGPoint? = nil
     ) {
         guard let evt = CGEvent(
             mouseEventSource: nil,
@@ -189,6 +226,10 @@ final class EventInjector {
             mouseButton: button
         ) else { return }
 
+        if let delta = delta {
+            evt.setIntegerValueField(.mouseEventDeltaX, value: Int64(delta.x.rounded()))
+            evt.setIntegerValueField(.mouseEventDeltaY, value: Int64(delta.y.rounded()))
+        }
         evt.setIntegerValueField(.mouseEventSubtype, value: 1)  // NSEventSubtype.tabletPoint = 1
         evt.setDoubleValueField(.mouseEventPressure, value: state.pressure)
 
@@ -219,7 +260,7 @@ final class EventInjector {
         evt.setIntegerValueField(.tabletEventPointButtons,
                                  value: tabletButtonsMask(state: state))
 
-        evt.post(tap: .cghidEventTap)
+        eventPoster(evt)
         postedCount += 1
 
         if Verbose.enabled {
@@ -254,13 +295,14 @@ final class EventInjector {
         // Also expose the delta to apps that read it.
         evt.setIntegerValueField(.mouseEventDeltaX, value: Int64(dx.rounded()))
         evt.setIntegerValueField(.mouseEventDeltaY, value: Int64(dy.rounded()))
-        evt.post(tap: .cghidEventTap)
+        eventPoster(evt)
     }
 
     /// Read the current cursor position. CGEvent returns coordinates in
     /// the CG "flipped" space (top-left origin) which is what we use to
     /// post events too.
     private func currentCursorPosition() -> CGPoint {
+        if let provider = cursorPositionProvider { return provider() }
         // CGEvent(source: nil) creates a "null" event ; its `.location`
         // is populated with the current pointer location by the OS.
         if let probe = CGEvent(source: nil) {
@@ -293,8 +335,8 @@ final class EventInjector {
         ) else { return }
         down.setIntegerValueField(.mouseEventClickState, value: 1)
         up.setIntegerValueField(.mouseEventClickState, value: 1)
-        down.post(tap: .cghidEventTap)
-        up.post(tap: .cghidEventTap)
+        eventPoster(down)
+        eventPoster(up)
     }
 
     // MARK: - Keyboard shortcut emission (for 3-finger gestures)
@@ -308,8 +350,8 @@ final class EventInjector {
         else { return }
         down.flags = modifiers
         up.flags = modifiers
-        down.post(tap: .cghidEventTap)
-        up.post(tap: .cghidEventTap)
+        eventPoster(down)
+        eventPoster(up)
         Verbose.log(String(format: "key combo keyCode=0x%02x modifiers=0x%08x", keyCode, modifiers.rawValue))
     }
 
@@ -322,8 +364,8 @@ final class EventInjector {
               let up   = CGEvent(mouseEventSource: nil, mouseType: .otherMouseUp,
                                  mouseCursorPosition: p, mouseButton: .center)
         else { return }
-        down.post(tap: .cghidEventTap)
-        up.post(tap: .cghidEventTap)
+        eventPoster(down)
+        eventPoster(up)
     }
 
     // MARK: - Scroll wheel (2-finger touch)
@@ -344,7 +386,7 @@ final class EventInjector {
             wheel3: 0
         ) else { return }
 
-        evt.post(tap: .cghidEventTap)
+        eventPoster(evt)
         Verbose.log(String(format: "scroll dy=%d dx=%d", intDy, intDx))
     }
 

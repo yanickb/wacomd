@@ -112,6 +112,11 @@ final class WacomDevice {
     }
 
     func stop() {
+        state.inRange = false
+        state.tipDown = false
+        state.barrelButton1 = false
+        state.barrelButton2 = false
+        injector.update(state: state, model: model)
         IOHIDDeviceClose(device, IOOptionBits(kIOHIDOptionsTypeNone))
         IOHIDDeviceUnscheduleFromRunLoop(device, CFRunLoopGetMain(), CFRunLoopMode.defaultMode.rawValue)
     }
@@ -166,7 +171,8 @@ final class WacomDevice {
         case .proximityLeave:
             state.inRange = false
             state.tipDown = false
-            state.barrelButton = false
+            state.barrelButton1 = false
+            state.barrelButton2 = false
             state.eraser = false
             injector.update(state: state, model: model)
         case .proximityEnter(let toolID, let serial):
@@ -201,7 +207,8 @@ final class WacomDevice {
             state.tiltY = Double(sample.tiltY)
             state.inRange = true
             state.tipDown = sample.tipDown
-            state.barrelButton = sample.barrelButton1 || sample.barrelButton2
+            state.barrelButton1 = sample.barrelButton1
+            state.barrelButton2 = sample.barrelButton2
             injector.update(state: state, model: model)
         }
     }
