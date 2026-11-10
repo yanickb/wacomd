@@ -302,15 +302,24 @@ final class EventInjector {
     /// Post a single keyboard chord (modifier flags + virtual key code).
     /// Used by the 3-finger gesture handler to fire system shortcuts like
     /// Mission Control (Ctrl+↑) or "switch Space" (Ctrl+←/→).
-    func postKeyCombo(keyCode: CGKeyCode, modifiers: CGEventFlags) {
+    static func keyComboEvents(keyCode: CGKeyCode, modifiers: CGEventFlags) -> (CGEvent, CGEvent)? {
         guard let down = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true),
-              let up   = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: false)
-        else { return }
-        down.flags = modifiers
-        up.flags = modifiers
+              let up = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: false)
+        else { return nil }
+        // Arrow-key symbolic shortcuts include the function-key bit. For
+        // example, Control+Up is registered as 0x840000, not just 0x40000.
+        let flags = (0x7B...0x7E).contains(keyCode)
+            ? modifiers.union(.maskSecondaryFn) : modifiers
+        down.flags = flags
+        up.flags = flags
+        return (down, up)
+    }
+
+    func postKeyCombo(keyCode: CGKeyCode, modifiers: CGEventFlags) {
+        guard let (down, up) = Self.keyComboEvents(keyCode: keyCode, modifiers: modifiers) else { return }
         down.post(tap: .cghidEventTap)
         up.post(tap: .cghidEventTap)
-        Verbose.log(String(format: "key combo keyCode=0x%02x modifiers=0x%08x", keyCode, modifiers.rawValue))
+        Verbose.log(String(format: "key combo keyCode=0x%02x modifiers=0x%08x", keyCode, down.flags.rawValue))
     }
 
     /// Post a middle-mouse click at the current cursor position.
