@@ -1,6 +1,7 @@
 import Foundation
 import CoreGraphics
 import AppKit
+import WacomdShared
 
 /// Capability mask attached to the tablet proximity event. Tells apps which
 /// of the tablet point fields actually carry meaningful data.
@@ -32,6 +33,8 @@ private enum TabletPointerType: Int64 {
 }
 
 final class EventInjector {
+    private var hoverFilter = PenHoverFilter()
+    private var hoverFilterConfig: WacomdConfig?
     private var lastTipDown: Bool = false
     private var lastBarrel: Bool = false
     private var lastInRange: Bool = false
@@ -63,6 +66,19 @@ final class EventInjector {
     // MARK: - Public API
 
     func update(state: PenState, model: WacomModel) {
+        let config = ConfigStore.shared.current
+        if hoverFilterConfig != config {
+            hoverFilter.reset()
+            hoverFilterConfig = config
+        }
+        var state = state
+        let position = hoverFilter.filter(CGPoint(x: state.x, y: state.y),
+            mmPerUnit: CGPoint(x: model.widthMM / model.maxX, y: model.heightMM / model.maxY),
+            deadbandMM: config.penHoverDeadbandMM, rejectSpikes: config.penHoverRejectSpikes,
+            hovering: state.inRange && !state.tipDown && state.pressure == 0 && !state.barrelButton)
+        state.x = position.x
+        state.y = position.y
+
         // ---- Proximity LEAVE ---------------------------------------------
         if !state.inRange {
             if lastTipDown {
@@ -124,6 +140,11 @@ final class EventInjector {
     /// Called by `WacomDevice` when a proximity-enter packet is parsed, so
     /// we can carry the real Wacom tool ID into the subsequent CGEvents.
     func updateToolIdentity(toolID: UInt32, serial: UInt64, isEraser: Bool) {
+        let nextToolID = Int64(toolID & 0xFFFF)
+        let nextSerial = Int64(bitPattern: UInt64(serial & 0xFFFFFFFF))
+        if currentToolID != nextToolID || currentSerial != nextSerial {
+            hoverFilter.reset()
+        }
         self.currentToolID = Int64(toolID & 0xFFFF)  // vendor pointer type (16-bit)
         self.currentSerial = Int64(bitPattern: UInt64(serial & 0xFFFFFFFF))
         self.currentPointerType = isEraser ? .eraser : .pen
