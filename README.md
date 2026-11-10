@@ -283,6 +283,56 @@ Adding them is just a matter of registering the new VID/PID in
 `KnownModels` in [`IntuosPro.swift`](Sources/wacomd/IntuosPro.swift) —
 **PRs welcome**.
 
+## Optional pen mouse mode and button scrolling
+
+Pen mapping remains absolute and both barrel buttons still right-click by
+default. The configuration app now includes a **Stylet** section with an
+absolute/relative mode picker, X/Y sensitivity, re-entry timeout, scroll-button
+selection, scrolling speed/direction and stationary-press middle clicking.
+Pen controls are independent of the touch master switch.
+
+Equivalent opt-in keys in `config.json` (merge with the existing object):
+
+```json
+"penMode": "relative",
+"penSensitivityX": 20,
+"penSensitivityY": 20,
+"penRelativeResetMs": 100,
+"penScrollButton": "upper",
+"penScrollSensitivity": 12,
+"penScrollNatural": true,
+"penScrollTapMiddleClick": true
+```
+
+`penMode` defaults to `absolute`; `relative` moves from the current cursor
+position, with sensitivity in screen-coordinate points per physical mm.
+Re-entry, a report gap, a tool change or a pen-option change establishes a
+fresh origin. Sensitivities are bounded to 0–200 and the reset timeout to
+1–5000 ms; non-finite values use defaults.
+
+`penScrollButton` defaults to `disabled`; choose `lower` or `upper` to hold
+that button and move the pen to scroll. The selected button is consumed,
+the cursor stays still, and tip clicks/pressure are suppressed during the
+hold. The other barrel button retains right-click behaviour. Scrolling
+starts after 0.3 mm of movement, accumulates fractional wheel travel, and
+stops immediately on release. In relative mode, release reanchors without
+accumulating a cursor jump. In absolute mode the absolute mapping resumes.
+The scroll sensitivity is bounded to 0–200 points/mm.
+
+With `penScrollTapMiddleClick` enabled (effective only when button scrolling
+is enabled), a stationary hover press released within 500 ms sends a middle
+click, for example to open a link in a new browser tab. Movement beyond
+0.3 mm, tip/other-button use, proximity loss and configuration changes
+cancel that click. A scroll that returns to its origin still cannot click.
+Long stationary holds do not click. Unplugging/proximity loss releases held
+mouse buttons.
+
+Validation includes pure coordinate/gesture tests and native CGEvent
+integration tests with intercepted output; tests never post real input.
+The wacomd integration and new controls have not yet been live-tested on a
+tablet. This adds no new tablet registrations and is independent of the
+hover-filter and system-shortcut PRs.
+
 ## Roadmap
 
 - Per-application profiles via `NSWorkspace.frontmostApplication`

@@ -3,6 +3,14 @@ import Foundation
 /// User-tunable configuration for the touch surface behaviour.
 /// Persisted to `~/Library/Application Support/wacomd/config.json` and
 /// reloaded on SIGHUP so the user can iterate without restarting the daemon.
+public enum PenPositionMode: String, Codable, CaseIterable {
+    case absolute, relative
+}
+
+public enum PenScrollButton: String, Codable, CaseIterable {
+    case disabled, lower, upper
+}
+
 public struct WacomdConfig: Codable, Equatable {
     // ---- Touch enable toggles ---------------------------------------------
     /// Master switch — when false, the whole multi-touch surface is
@@ -27,6 +35,19 @@ public struct WacomdConfig: Codable, Equatable {
     /// 3-finger swipe trigger threshold, in raw units of centroid travel.
     public var threeFingerSwipeThreshold: Double = 200
 
+    // ---- Optional pen mouse mode and button scrolling --------------------
+    public var penMode: PenPositionMode = .absolute
+    /// Screen-coordinate points per physical millimetre; inactive in absolute mode.
+    public var penSensitivityX: Double = 20
+    public var penSensitivityY: Double = 20
+    public var penRelativeResetMs: Double = 100
+    public var penScrollButton: PenScrollButton = .disabled
+    public var penScrollSensitivity: Double = 12
+    public var penScrollNatural: Bool = true
+    /// With button scrolling enabled, a short stationary hover press sends a
+    /// middle click on release. Moving or pressing the tip cancels the click.
+    public var penScrollTapMiddleClick: Bool = true
+
     // ---- Tap recognition --------------------------------------------------
     /// Max contact duration to still be considered a "tap" (not a drag).
     /// 120 ms is on the tight side — only sharp deliberate taps qualify.
@@ -46,11 +67,21 @@ public struct WacomdConfig: Codable, Equatable {
         case naturalScroll
         case cursorSensitivity, scrollSensitivity, threeFingerSwipeThreshold
         case tapMaxDurationMs, tapMaxRawMovement
+        case penMode, penSensitivityX, penSensitivityY, penRelativeResetMs
+        case penScrollButton, penScrollSensitivity, penScrollNatural, penScrollTapMiddleClick
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = WacomdConfig()  // baseline of defaults
+        self.penMode = try c.decodeIfPresent(PenPositionMode.self, forKey: .penMode) ?? d.penMode
+        self.penSensitivityX = try c.decodeIfPresent(Double.self, forKey: .penSensitivityX) ?? d.penSensitivityX
+        self.penSensitivityY = try c.decodeIfPresent(Double.self, forKey: .penSensitivityY) ?? d.penSensitivityY
+        self.penRelativeResetMs = try c.decodeIfPresent(Double.self, forKey: .penRelativeResetMs) ?? d.penRelativeResetMs
+        self.penScrollButton = try c.decodeIfPresent(PenScrollButton.self, forKey: .penScrollButton) ?? d.penScrollButton
+        self.penScrollSensitivity = try c.decodeIfPresent(Double.self, forKey: .penScrollSensitivity) ?? d.penScrollSensitivity
+        self.penScrollNatural = try c.decodeIfPresent(Bool.self, forKey: .penScrollNatural) ?? d.penScrollNatural
+        self.penScrollTapMiddleClick = try c.decodeIfPresent(Bool.self, forKey: .penScrollTapMiddleClick) ?? d.penScrollTapMiddleClick
         self.touchEnabled      = try c.decodeIfPresent(Bool.self,   forKey: .touchEnabled)      ?? d.touchEnabled
         self.oneFingerCursor   = try c.decodeIfPresent(Bool.self,   forKey: .oneFingerCursor)   ?? d.oneFingerCursor
         self.twoFingerScroll   = try c.decodeIfPresent(Bool.self,   forKey: .twoFingerScroll)   ?? d.twoFingerScroll
