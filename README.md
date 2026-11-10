@@ -283,6 +283,30 @@ Adding them is just a matter of registering the new VID/PID in
 `KnownModels` in [`IntuosPro.swift`](Sources/wacomd/IntuosPro.swift) —
 **PRs welcome**.
 
+## Optional pen hover noise filtering
+
+The pen output remains unfiltered by default. To suppress tiny stationary
+hover jitter, add these keys to `~/Library/Application Support/wacomd/config.json`
+and reload the daemon with SIGHUP:
+
+```json
+"penHoverDeadbandMM": 0.10,
+"penHoverRejectSpikes": true
+```
+
+The spatial deadband is measured in millimetres using the selected model's
+physical dimensions. Optional three-report median rejection removes isolated
+small coordinate outliers before that deadband. It adds one report of delay
+for small continuous hover motion (about 5 ms at 200 Hz). Motion larger than
+four times the deadband passes immediately and clears the median history.
+Any pressure/contact or barrel button bypasses both filters; proximity loss,
+tool identity changes and configuration reload reset the history. Values above
+1 mm are clamped, and a zero radius disables both filters.
+
+This filter was ported from [PthTouch](https://github.com/matebenyovszky/PthTouch).
+The Swift port has deterministic tests but has not yet been live-tested inside
+wacomd. It does not add PTH-851 support or change touch gestures.
+
 ## Roadmap
 
 - Per-application profiles via `NSWorkspace.frontmostApplication`

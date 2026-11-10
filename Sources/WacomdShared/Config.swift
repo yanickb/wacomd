@@ -27,6 +27,14 @@ public struct WacomdConfig: Codable, Equatable {
     /// 3-finger swipe trigger threshold, in raw units of centroid travel.
     public var threeFingerSwipeThreshold: Double = 200
 
+    // ---- Optional pen hover noise filtering ------------------------------
+    /// Spatial radius in millimetres, 0 = off; clamped to 1 mm by the filter.
+    /// Pressure/contact and either barrel button bypass the filter.
+    public var penHoverDeadbandMM: Double = 0
+    /// Reject isolated small outliers using a three-report median before the
+    /// deadband. Requires a positive penHoverDeadbandMM; defaults to off.
+    public var penHoverRejectSpikes: Bool = false
+
     // ---- Tap recognition --------------------------------------------------
     /// Max contact duration to still be considered a "tap" (not a drag).
     /// 120 ms is on the tight side — only sharp deliberate taps qualify.
@@ -46,11 +54,14 @@ public struct WacomdConfig: Codable, Equatable {
         case naturalScroll
         case cursorSensitivity, scrollSensitivity, threeFingerSwipeThreshold
         case tapMaxDurationMs, tapMaxRawMovement
+        case penHoverDeadbandMM, penHoverRejectSpikes
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = WacomdConfig()  // baseline of defaults
+        self.penHoverDeadbandMM = try c.decodeIfPresent(Double.self, forKey: .penHoverDeadbandMM) ?? d.penHoverDeadbandMM
+        self.penHoverRejectSpikes = try c.decodeIfPresent(Bool.self, forKey: .penHoverRejectSpikes) ?? d.penHoverRejectSpikes
         self.touchEnabled      = try c.decodeIfPresent(Bool.self,   forKey: .touchEnabled)      ?? d.touchEnabled
         self.oneFingerCursor   = try c.decodeIfPresent(Bool.self,   forKey: .oneFingerCursor)   ?? d.oneFingerCursor
         self.twoFingerScroll   = try c.decodeIfPresent(Bool.self,   forKey: .twoFingerScroll)   ?? d.twoFingerScroll
